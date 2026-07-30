@@ -86,6 +86,7 @@ class RunManifest:
     artifacts: Mapping[str, str] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     configuration: Mapping[str, Any] = field(default_factory=dict)
+    labels: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.run_id, str) or not self.run_id.strip():
@@ -105,6 +106,8 @@ class RunManifest:
         }
         if self.completed_at is not None:
             payload["completed_at"] = self.completed_at
+        if self.labels:
+            payload["labels"] = dict(self.labels)
         return payload
 
     @classmethod
@@ -115,7 +118,7 @@ class RunManifest:
             identifiers=dict(value["identifiers"]), hashes=dict(value["hashes"]),
             schema_version=str(value.get("schema_version", "arp/v1")), completed_at=value.get("completed_at"),
             artifacts=dict(value.get("artifacts") or {}), metadata=dict(value.get("metadata") or {}),
-            configuration=dict(value.get("configuration") or {}),
+            configuration=dict(value.get("configuration") or {}), labels=dict(value.get("labels") or {}),
         )
 
 
