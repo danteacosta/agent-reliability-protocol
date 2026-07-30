@@ -1,21 +1,13 @@
-"""Dependency-free adapters to common telemetry record shapes."""
-
+"""Lossless adapters to common telemetry record shapes."""
 from __future__ import annotations
-
 from typing import Any
-
 from agent_reliability_protocol.events import LifecycleEvent
 
-
 class OpenTelemetryExporter:
-    """Return OTel-compatible log/span input; callers own SDK emission."""
     def export(self, event: LifecycleEvent) -> dict[str, Any]:
-        return {"name": f"arp.{event.type}", "timestamp": event.occurred_at, "attributes": {"arp.run_id": event.run_id, "arp.event_type": event.type, **{f"arp.data.{key}": value for key, value in event.data.items()}}}
-
+        canonical = event.to_dict()
+        return {"name": f"arp.{event.event_type}", "timestamp": event.ended_at, "arp.event": canonical, "attributes": {"arp.run_id": event.run_id, "arp.event_type": event.event_type, "arp.event": canonical}}
 
 class OpenInferenceExporter:
-    """Return OpenInference-compatible span input without requiring its SDK."""
     def export(self, event: LifecycleEvent) -> dict[str, Any]:
-        record = OpenTelemetryExporter().export(event)
-        record["attributes"]["openinference.span.kind"] = "CHAIN"
-        return record
+        record = OpenTelemetryExporter().export(event); record["attributes"]["openinference.span.kind"] = "CHAIN"; return record

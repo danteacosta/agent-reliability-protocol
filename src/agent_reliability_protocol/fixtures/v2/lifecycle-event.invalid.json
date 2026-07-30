@@ -1,0 +1,1 @@
+{"event_id":"fixture-event","schema_version":"2.0.0","experiment_id":"fixture-experiment","run_id":"fixture-run","episode_id":"fixture-episode","replication_id":0,"sequence_number":1,"checkpoint":"not.a.checkpoint","event_type":"not.a.checkpoint","started_at":"now","ended_at":"later"}
