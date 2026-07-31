@@ -67,6 +67,64 @@ class ArpV2ContractTests(unittest.TestCase):
         )
         self.assertEqual(LifecycleEvent.from_dict(event.to_dict()), event)
 
+    def test_lifecycle_sequence_enforces_identity_order_and_thesis_checkpoints(self) -> None:
+        from agent_reliability_protocol import LifecycleEvent, validate_lifecycle_sequence
+
+        events = [
+            LifecycleEvent(
+                event_id="event-1", schema_version="2.0.5", experiment_id="project-1", run_id="run-1",
+                episode_id="episode-1", replication_id=0, sequence_number=1,
+                checkpoint="input.received", event_type="input.received",
+                started_at="2026-07-30T00:00:00+00:00", ended_at="2026-07-30T00:00:01+00:00",
+            ),
+            LifecycleEvent(
+                event_id="event-2", schema_version="2.0.5", experiment_id="project-1", run_id="run-1",
+                episode_id="episode-1", replication_id=0, sequence_number=2,
+                checkpoint="interpretation.completed", event_type="interpretation.completed",
+                started_at="2026-07-30T00:00:01+00:00", ended_at="2026-07-30T00:00:02+00:00",
+            ),
+            LifecycleEvent(
+                event_id="event-3", schema_version="2.0.5", experiment_id="project-1", run_id="run-1",
+                episode_id="episode-1", replication_id=0, sequence_number=3,
+                checkpoint="plan.completed", event_type="plan.completed",
+                started_at="2026-07-30T00:00:02+00:00", ended_at="2026-07-30T00:00:03+00:00",
+            ),
+            LifecycleEvent(
+                event_id="event-4", schema_version="2.0.5", experiment_id="project-1", run_id="run-1",
+                episode_id="episode-1", replication_id=0, sequence_number=4,
+                checkpoint="execution.started", event_type="execution.started",
+                started_at="2026-07-30T00:00:03+00:00", ended_at="2026-07-30T00:00:04+00:00",
+            ),
+        ]
+
+        self.assertIsNone(validate_lifecycle_sequence(events))
+
+        with self.assertRaisesRegex(ValueError, "sequence"):
+            validate_lifecycle_sequence(events[:1] + [LifecycleEvent.from_dict({**events[1].to_dict(), "sequence_number": 3})])
+        with self.assertRaisesRegex(ValueError, "identity"):
+            validate_lifecycle_sequence(events[:1] + [LifecycleEvent.from_dict({**events[1].to_dict(), "episode_id": "other"})])
+
+    def test_thesis_envelope_requires_manifest_identity_and_rejects_invalid_events(self) -> None:
+        from agent_reliability_protocol import LifecycleEvent, RunManifest, validate_thesis_envelope
+
+        manifest = RunManifest(
+            schema_version="2.0.5", experiment_id="project-1", run_id="run-1", created_at="now",
+            git_sha="sha", harness_name="harness", harness_version="1", dataset_id="dataset-1",
+            dataset_hash="dataset-hash", configuration_hash="config-hash", model_provider="provider",
+            model_name="model", model_version="version", random_seed=1, replication_count=1, environment={},
+        )
+        event = LifecycleEvent(
+            event_id="event-1", schema_version="2.0.5", experiment_id="project-1", run_id="run-1",
+            episode_id="episode-1", replication_id=0, sequence_number=1,
+            checkpoint="input.received", event_type="input.received", started_at="now", ended_at="later",
+            attributes={"dataset_id": "dataset-1"},
+        )
+
+        self.assertIsNone(validate_thesis_envelope(manifest, [event]))
+        with self.assertRaisesRegex(ValueError, "experiment_id"):
+            validate_thesis_envelope(manifest, [LifecycleEvent.from_dict({**event.to_dict(), "experiment_id": "other"})])
+
+
     def test_gate_decision_carries_a_structured_reason_evidence_and_threshold(self) -> None:
         from agent_reliability_protocol import DecisionReason, EvidenceReference, EvidenceStage, GateDecision
 
@@ -127,6 +185,9 @@ class ArpV2ContractTests(unittest.TestCase):
         for kind, name in (("manifest", "run-manifest"), ("event", "lifecycle-event"), ("decision", "gate-decision")):
             self.assertEqual(check_contract(kind, json.loads((root / f"{name}.valid.json").read_text(encoding="utf-8"))), [])
             self.assertNotEqual(check_contract(kind, json.loads((root / f"{name}.invalid.json").read_text(encoding="utf-8"))), [])
+
+        self.assertEqual(check_contract("envelope", json.loads((root / "lifecycle-envelope.valid.json").read_text(encoding="utf-8"))), [])
+        self.assertNotEqual(check_contract("envelope", json.loads((root / "lifecycle-envelope.invalid.json").read_text(encoding="utf-8"))), [])
 
 
 if __name__ == "__main__":

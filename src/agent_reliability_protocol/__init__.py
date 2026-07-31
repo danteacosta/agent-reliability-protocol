@@ -1,7 +1,7 @@
 from agent_reliability_protocol.contracts import DecisionReason, EpisodeIdentity, Evidence, EvidenceReference, EvidenceStage, GateDecision, RunManifest
-from agent_reliability_protocol.events import JsonlExporter, LifecycleEvent, LIFECYCLE_CHECKPOINTS, new_event
+from agent_reliability_protocol.events import JsonlExporter, LifecycleEvent, LIFECYCLE_CHECKPOINTS, THESIS_CHECKPOINT_ORDER, new_event, validate_lifecycle_sequence
 from agent_reliability_protocol.exporters import OpenInferenceExporter, OpenTelemetryExporter
-from agent_reliability_protocol.interchange import CaptureContent, adapt_manifest_v2, check_contract, export_contract, redact_contract, upgrade_manifest, validate_run_directory
-from agent_reliability_protocol.neutral import assert_neutral_contract, assert_neutral_source
+from agent_reliability_protocol.interchange import CaptureContent, adapt_manifest_v2, check_contract, export_contract, redact_contract, upgrade_manifest, validate_run_directory, validate_thesis_envelope
+from agent_reliability_protocol.neutral import assert_neutral_contract, assert_neutral_source, assert_no_protocol_next_dependency, assert_protocol_next_independent
 __version__ = "2.0.5"
-__all__ = ["CaptureContent", "DecisionReason", "EpisodeIdentity", "Evidence", "EvidenceReference", "EvidenceStage", "GateDecision", "RunManifest", "LifecycleEvent", "LIFECYCLE_CHECKPOINTS", "JsonlExporter", "new_event", "OpenTelemetryExporter", "OpenInferenceExporter", "adapt_manifest_v2", "check_contract", "export_contract", "redact_contract", "upgrade_manifest", "validate_run_directory", "assert_neutral_contract", "assert_neutral_source"]
+__all__ = ["CaptureContent", "DecisionReason", "EpisodeIdentity", "Evidence", "EvidenceReference", "EvidenceStage", "GateDecision", "RunManifest", "LifecycleEvent", "LIFECYCLE_CHECKPOINTS", "THESIS_CHECKPOINT_ORDER", "JsonlExporter", "new_event", "validate_lifecycle_sequence", "OpenTelemetryExporter", "OpenInferenceExporter", "adapt_manifest_v2", "check_contract", "export_contract", "redact_contract", "upgrade_manifest", "validate_run_directory", "validate_thesis_envelope", "assert_neutral_contract", "assert_neutral_source", "assert_no_protocol_next_dependency", "assert_protocol_next_independent"]
