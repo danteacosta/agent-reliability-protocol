@@ -6,7 +6,7 @@ from enum import Enum
 import re
 from typing import Any, Literal, Mapping
 
-SCHEMA_VERSION = "2.0.2"
+SCHEMA_VERSION = "2.0.3"
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DecisionOutcome = Literal["pass", "fail"]
 Decision = Literal["approve", "warn", "request_clarification", "block"]
@@ -120,6 +120,8 @@ class RunManifest:
         for name in v2_names[:13]: _nonempty(name, str(values[name]))
         if legacy and not values["identifiers"]:
             raise ValueError("identifiers are required for legacy manifests")
+        if legacy and (not values["hashes"] or any(not str(item) for item in values["hashes"].values())):
+            raise ValueError("hashes are required for legacy manifests")
         _schema_version(values["schema_version"])
         if not isinstance(values["random_seed"], int): raise ValueError("random_seed must be an integer")
         if not isinstance(values["replication_count"], int) or values["replication_count"] < 1: raise ValueError("replication_count must be positive")
