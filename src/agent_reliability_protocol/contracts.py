@@ -6,7 +6,7 @@ from enum import Enum
 import re
 from typing import Any, Literal, Mapping
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.0.1"
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DecisionOutcome = Literal["pass", "fail"]
 Decision = Literal["approve", "warn", "request_clarification", "block"]
@@ -66,6 +66,11 @@ class DecisionReason:
 class GateDecision:
     decision: Decision; risk_score: float | None; confidence: float | None; checkpoint: str; reasons: tuple[DecisionReason, ...]; evidence: tuple[EvidenceReference, ...]; threshold_version: str; _legacy: bool = field(compare=False, repr=False)
     def __init__(self, decision: Decision | None = None, risk_score: float | None = None, confidence: float | None = None, checkpoint: str = "gate.decided", reasons: tuple[DecisionReason, ...] = (), evidence: tuple[EvidenceReference, ...] = (), threshold_version: str = "legacy", *, outcome: DecisionOutcome | None = None) -> None:
+        # Preserve the compact v0.1 positional form GateDecision("fail", reasons)
+        # while exposing the explicit v2 fields to new callers.
+        if decision in ("pass", "fail") and isinstance(risk_score, (tuple, list)) and not reasons:
+            reasons = tuple(risk_score)
+            risk_score = None
         legacy = outcome is not None or decision in ("pass", "fail")
         if outcome is None and decision in ("pass", "fail"): outcome, decision = decision, None  # type: ignore[assignment]
         if outcome is not None:
@@ -107,7 +112,9 @@ class RunManifest:
             data = dict(kwargs); data.update(dict(zip(("run_id", "started_at", "decision", "identifiers", "hashes"), args)))
             if isinstance(data.get("decision"), Mapping): data["decision"] = GateDecision.from_dict(data["decision"])
             identifiers, hashes = dict(data.get("identifiers") or {}), dict(data.get("hashes") or {})
-            values = {"schema_version": str(data.get("schema_version", "arp/v1")), "experiment_id": identifiers.get("experiment_id", "legacy"), "run_id": data["run_id"], "created_at": data["started_at"], "git_sha": hashes.get("git_sha", "unknown"), "harness_name": identifiers.get("harness_name", "legacy"), "harness_version": identifiers.get("harness_version", "unknown"), "dataset_id": identifiers.get("dataset_id", "unknown"), "dataset_hash": hashes.get("dataset", next(iter(hashes.values()), "unknown")), "configuration_hash": hashes.get("configuration", "unknown"), "model_provider": "unknown", "model_name": "unknown", "model_version": "unknown", "random_seed": 0, "replication_count": 1, "environment": {}, "decision": data["decision"], "identifiers": identifiers, "hashes": hashes, "completed_at": data.get("completed_at"), "artifacts": dict(data.get("artifacts") or {}), "metadata": dict(data.get("metadata") or {}), "configuration": dict(data.get("configuration") or {}), "labels": dict(data.get("labels") or {})}
+            raw_artifacts = data.get("artifacts") or {}
+            artifacts = {} if isinstance(raw_artifacts, str) else dict(raw_artifacts)
+            values = {"schema_version": str(data.get("schema_version", "arp/v1")), "experiment_id": identifiers.get("experiment_id", "legacy"), "run_id": data["run_id"], "created_at": data["started_at"], "git_sha": hashes.get("git_sha", "unknown"), "harness_name": identifiers.get("harness_name", "legacy"), "harness_version": identifiers.get("harness_version", "unknown"), "dataset_id": identifiers.get("dataset_id", "unknown"), "dataset_hash": hashes.get("dataset", next(iter(hashes.values()), "unknown")), "configuration_hash": hashes.get("configuration", "unknown"), "model_provider": "unknown", "model_name": "unknown", "model_version": "unknown", "random_seed": 0, "replication_count": 1, "environment": {}, "decision": data["decision"], "identifiers": identifiers, "hashes": hashes, "completed_at": data.get("completed_at"), "artifacts": artifacts, "metadata": dict(data.get("metadata") or {}), "configuration": dict(data.get("configuration") or {}), "labels": dict(data.get("labels") or {})}
         else:
             values = dict(zip(v2_names, args)); values.update(kwargs); values.setdefault("completed_at", None); values.setdefault("artifacts", {}); values.setdefault("metadata", {}); values.setdefault("configuration", {}); values.setdefault("labels", {}); values.setdefault("decision", None); values.setdefault("identifiers", {}); values.setdefault("hashes", {})
         for name in v2_names[:13]: _nonempty(name, str(values[name]))
