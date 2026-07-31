@@ -6,7 +6,7 @@ from enum import Enum
 import re
 from typing import Any, Literal, Mapping
 
-SCHEMA_VERSION = "2.0.1"
+SCHEMA_VERSION = "2.0.2"
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DecisionOutcome = Literal["pass", "fail"]
 Decision = Literal["approve", "warn", "request_clarification", "block"]
@@ -118,6 +118,8 @@ class RunManifest:
         else:
             values = dict(zip(v2_names, args)); values.update(kwargs); values.setdefault("completed_at", None); values.setdefault("artifacts", {}); values.setdefault("metadata", {}); values.setdefault("configuration", {}); values.setdefault("labels", {}); values.setdefault("decision", None); values.setdefault("identifiers", {}); values.setdefault("hashes", {})
         for name in v2_names[:13]: _nonempty(name, str(values[name]))
+        if legacy and not values["identifiers"]:
+            raise ValueError("identifiers are required for legacy manifests")
         _schema_version(values["schema_version"])
         if not isinstance(values["random_seed"], int): raise ValueError("random_seed must be an integer")
         if not isinstance(values["replication_count"], int) or values["replication_count"] < 1: raise ValueError("replication_count must be positive")
@@ -129,6 +131,9 @@ class RunManifest:
             if self.completed_at: value["completed_at"] = self.completed_at
             if self.labels: value["labels"] = dict(self.labels)
             return value
-        return {k: (dict(v) if isinstance(v, Mapping) else v) for k, v in self.__dict__.items() if k != "_legacy" and v is not None}
+        payload = {k: (dict(v) if isinstance(v, Mapping) else v) for k, v in self.__dict__.items() if k != "_legacy" and v is not None}
+        if isinstance(self.decision, GateDecision):
+            payload["decision"] = self.decision.to_dict()
+        return payload
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "RunManifest": return cls(**dict(value))
