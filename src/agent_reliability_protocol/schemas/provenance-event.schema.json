@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://agent-reliability-protocol.dev/schemas/provenance-event-2.0.0.json","$ref":"lifecycle-event.schema.json"}

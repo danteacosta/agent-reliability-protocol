@@ -1,0 +1,1 @@
+{"decision":"warn","risk_score":0.7,"confidence":0.9,"checkpoint":"gate.decided","reasons":[{"code":"quality.low","message":"Quality is below policy.","evidence":[]}],"evidence":[{"evidence_id":"fixture-evidence","metric_name":"quality","observed_value":0.7,"threshold":0.9,"stage":"pre_final"}],"threshold_version":"1.0.0"}
