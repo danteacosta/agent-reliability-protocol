@@ -6,7 +6,7 @@ from enum import Enum
 import re
 from typing import Any, Literal, Mapping
 
-SCHEMA_VERSION = "2.0.3"
+SCHEMA_VERSION = "2.0.4"
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DecisionOutcome = Literal["pass", "fail"]
 Decision = Literal["approve", "warn", "request_clarification", "block"]
@@ -117,11 +117,11 @@ class RunManifest:
             values = {"schema_version": str(data.get("schema_version", "arp/v1")), "experiment_id": identifiers.get("experiment_id", "legacy"), "run_id": data["run_id"], "created_at": data["started_at"], "git_sha": hashes.get("git_sha", "unknown"), "harness_name": identifiers.get("harness_name", "legacy"), "harness_version": identifiers.get("harness_version", "unknown"), "dataset_id": identifiers.get("dataset_id", "unknown"), "dataset_hash": hashes.get("dataset", next(iter(hashes.values()), "unknown")), "configuration_hash": hashes.get("configuration", "unknown"), "model_provider": "unknown", "model_name": "unknown", "model_version": "unknown", "random_seed": 0, "replication_count": 1, "environment": {}, "decision": data["decision"], "identifiers": identifiers, "hashes": hashes, "completed_at": data.get("completed_at"), "artifacts": artifacts, "metadata": dict(data.get("metadata") or {}), "configuration": dict(data.get("configuration") or {}), "labels": dict(data.get("labels") or {})}
         else:
             values = dict(zip(v2_names, args)); values.update(kwargs); values.setdefault("completed_at", None); values.setdefault("artifacts", {}); values.setdefault("metadata", {}); values.setdefault("configuration", {}); values.setdefault("labels", {}); values.setdefault("decision", None); values.setdefault("identifiers", {}); values.setdefault("hashes", {})
-        for name in v2_names[:13]: _nonempty(name, str(values[name]))
         if legacy and not values["identifiers"]:
             raise ValueError("identifiers are required for legacy manifests")
         if legacy and (not values["hashes"] or any(not str(item) for item in values["hashes"].values())):
             raise ValueError("hashes are required for legacy manifests")
+        for name in v2_names[:13]: _nonempty(name, str(values[name]))
         _schema_version(values["schema_version"])
         if not isinstance(values["random_seed"], int): raise ValueError("random_seed must be an integer")
         if not isinstance(values["replication_count"], int) or values["replication_count"] < 1: raise ValueError("replication_count must be positive")
