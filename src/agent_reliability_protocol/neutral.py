@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,40 @@ def assert_neutral_source(package_root: Path | str) -> None:
             offenders.append(str(path))
     if offenders:
         raise ValueError("harness-specific source markers are not allowed: " + ", ".join(offenders))
+
+
+def assert_no_protocol_next_dependency(package_root: Path | str) -> None:
+    """Guard producer code from importing the consumer-side protocol_next API.
+
+    Import syntax is inspected with ``ast`` instead of searching text, so
+    documentation and compatibility strings such as ``protocol_next/v1`` do
+    not create false positives.  This is intentionally runtime-callable by
+    CI or a producer startup check and has no dependency on protocol_next.
+    """
+    offenders: list[str] = []
+    for path in Path(package_root).rglob("*.py"):
+        if path.name == "neutral.py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            raise ValueError(f"cannot inspect producer source {path}: {exc}") from exc
+        for node in ast.walk(tree):
+            imported: list[str] = []
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported = [node.module]
+            if any(name == "protocol_next" or name.startswith("protocol_next.") for name in imported):
+                offenders.append(str(path))
+                break
+    if offenders:
+        raise ValueError("protocol_next must not be a producer dependency: " + ", ".join(offenders))
+
+
+def assert_protocol_next_independent(package_root: Path | str) -> None:
+    """Compatibility alias for :func:`assert_no_protocol_next_dependency`."""
+    assert_no_protocol_next_dependency(package_root)
 
 
 def _find_domain_keys(value: Any) -> set[str]:

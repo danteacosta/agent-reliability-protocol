@@ -2,7 +2,8 @@
 
 `agent-reliability-protocol` (ARP) is a dependency-free, neutral contract for
 recording reproducible runs, episode lifecycle events, evidence, and gate
-decisions across agent systems. Version `2.0.0` is a breaking SemVer release:
+decisions across agent systems. Version `2.0.6` is the current package release
+on the stable ARP 2.0.5 wire schema:
 new records carry a SemVer `schema_version`; v0.1 manifests/events remain
 readable through compatibility adapters.
 
@@ -17,7 +18,7 @@ normal form for old consumers.
 from agent_reliability_protocol import EpisodeIdentity, RunManifest
 
 identity = EpisodeIdentity("experiment-1", "run-123", "episode-1", 0, "workload-1")
-manifest = RunManifest("2.0.0", "experiment-1", "run-123", "2026-07-30T00:00:00+00:00", "abc123", "harness", "1.0.0", "dataset", "sha256:...", "sha256:...", "provider", "model", "version", 7, 1, {"runtime": "ci"})
+manifest = RunManifest("2.0.5", "experiment-1", "run-123", "2026-07-30T00:00:00+00:00", "abc123", "harness", "1.0.0", "dataset", "sha256:...", "sha256:...", "provider", "model", "version", 7, 1, {"runtime": "ci"})
 ```
 
 Validate a JSON document without network access:
