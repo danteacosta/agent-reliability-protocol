@@ -3,5 +3,5 @@ from agent_reliability_protocol.events import JsonlExporter, LifecycleEvent, LIF
 from agent_reliability_protocol.exporters import OpenInferenceExporter, OpenTelemetryExporter
 from agent_reliability_protocol.interchange import CaptureContent, adapt_manifest_v2, check_contract, export_contract, redact_contract, upgrade_manifest, validate_run_directory, validate_thesis_envelope
 from agent_reliability_protocol.neutral import assert_neutral_contract, assert_neutral_source, assert_no_protocol_next_dependency, assert_protocol_next_independent
-__version__ = "2.0.5"
+__version__ = "2.0.6"
 __all__ = ["CaptureContent", "DecisionReason", "EpisodeIdentity", "Evidence", "EvidenceReference", "EvidenceStage", "GateDecision", "RunManifest", "LifecycleEvent", "LIFECYCLE_CHECKPOINTS", "THESIS_CHECKPOINT_ORDER", "JsonlExporter", "new_event", "validate_lifecycle_sequence", "OpenTelemetryExporter", "OpenInferenceExporter", "adapt_manifest_v2", "check_contract", "export_contract", "redact_contract", "upgrade_manifest", "validate_run_directory", "validate_thesis_envelope", "assert_neutral_contract", "assert_neutral_source", "assert_no_protocol_next_dependency", "assert_protocol_next_independent"]
