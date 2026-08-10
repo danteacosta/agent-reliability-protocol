@@ -1,5 +1,10 @@
 # Agent Reliability Protocol
 
+MIT-licensed. See [LICENSE](LICENSE), [CONTRIBUTING](CONTRIBUTING.md), and
+[SECURITY](SECURITY.md). The published v2.0.6 package and tag are immutable;
+consumer harnesses pin this release while the ARP 2.0.5 wire contract remains
+stable.
+
 `agent-reliability-protocol` (ARP) is a dependency-free, neutral contract for
 recording reproducible runs, episode lifecycle events, evidence, and gate
 decisions across agent systems. Version `2.0.6` is the current package release
