@@ -1,0 +1,2 @@
+# ARP has no runtime dependencies; this pins the contract test environment.
+pytest==9.1.1

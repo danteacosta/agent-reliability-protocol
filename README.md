@@ -33,6 +33,9 @@ arp-contract-test check --kind manifest --input manifest.json
 arp-contract-test check --run-directory ./runs/example
 ```
 
+The test environment is pinned in [constraints.txt](constraints.txt). The
+published v2.0.6 package remains MIT-licensed and is not retagged.
+
 The package intentionally contains no application, model, provider, or harness
 imports. Core fields may not contain domain terms such as `smell`, `oracle_spec`,
 `retrieval_hit`, `mrr`, or `mutation_score`. Capture policy is explicit:
