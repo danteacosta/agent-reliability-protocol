@@ -7,8 +7,9 @@ stable.
 
 `agent-reliability-protocol` (ARP) is a dependency-free, neutral contract for
 recording reproducible runs, episode lifecycle events, evidence, and gate
-decisions across agent systems. Version `2.0.6` is the current package release
-on the stable ARP 2.0.5 wire schema:
+decisions across agent systems. The current development line is ARP `2.1.0`:
+it adds generic scalar claims, pending gate requests, capture policy, profiles,
+and namespaced extensions while preserving the ARP 2.0.5 wire contract:
 new records carry a SemVer `schema_version`; v0.1 manifests/events remain
 readable through compatibility adapters.
 
@@ -38,6 +39,12 @@ published v2.0.6 package remains MIT-licensed and is not retagged.
 
 The package intentionally contains no application, model, provider, or harness
 imports. Core fields may not contain domain terms such as `smell`, `oracle_spec`,
-`retrieval_hit`, `mrr`, or `mutation_score`. Capture policy is explicit:
+`retrieval_hit`, `mrr`, or `mutation_score`; those may appear only inside an
+opaque, namespaced `extensions` payload. Capture policy is explicit:
 `none`, `metadata`, `redacted`, or `full`; `redacted` removes prompts,
 artifacts, tool arguments, retrieved content, PII, and secrets.
+
+The merge-gated delivery integration is documented in
+[docs/profiles/software-delivery-v1.md](docs/profiles/software-delivery-v1.md).
+The final control-plane specification is documented in
+[docs/merge-gated-delivery-control-plane-spec.md](docs/merge-gated-delivery-control-plane-spec.md).

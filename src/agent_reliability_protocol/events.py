@@ -23,23 +23,24 @@ _THESIS_CHECKPOINT_RANK = {name: rank for rank, name in enumerate(THESIS_CHECKPO
 
 @dataclass(frozen=True, init=False)
 class LifecycleEvent:
-    event_id: str; schema_version: str; experiment_id: str; run_id: str; episode_id: str; replication_id: int; sequence_number: int; checkpoint: str; event_type: str; started_at: str; ended_at: str; attributes: Mapping[str, Any] = field(default_factory=dict); content_reference: str | None = None; parent_event_id: str | None = None; _legacy: bool = field(compare=False, repr=False)
+    event_id: str; schema_version: str; experiment_id: str; run_id: str; episode_id: str; replication_id: int; sequence_number: int; checkpoint: str; event_type: str; started_at: str; ended_at: str; attributes: Mapping[str, Any] = field(default_factory=dict); content_reference: str | None = None; parent_event_id: str | None = None; extensions: Mapping[str, Any] = field(default_factory=dict); _legacy: bool = field(compare=False, repr=False)
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         legacy = "type" in kwargs or (len(args) == 4 and "event_id" not in kwargs)
         if legacy:
             data = dict(kwargs); data.update(dict(zip(("type", "run_id", "occurred_at", "data"), args)))
             event_type = str(data["type"])
             # known v0.1 events are admitted as opaque legacy values.
-            values = dict(event_id=f"legacy:{data['run_id']}:{event_type}:{data['occurred_at']}", schema_version="arp/v1", experiment_id="legacy", run_id=str(data["run_id"]), episode_id="legacy", replication_id=0, sequence_number=0, checkpoint=event_type, event_type=event_type, started_at=str(data["occurred_at"]), ended_at=str(data["occurred_at"]), attributes=dict(data.get("data") or {}), content_reference=None, parent_event_id=None)
+            values = dict(event_id=f"legacy:{data['run_id']}:{event_type}:{data['occurred_at']}", schema_version="arp/v1", experiment_id="legacy", run_id=str(data["run_id"]), episode_id="legacy", replication_id=0, sequence_number=0, checkpoint=event_type, event_type=event_type, started_at=str(data["occurred_at"]), ended_at=str(data["occurred_at"]), attributes=dict(data.get("data") or {}), content_reference=None, parent_event_id=None, extensions={})
         else:
-            names = ("event_id", "schema_version", "experiment_id", "run_id", "episode_id", "replication_id", "sequence_number", "checkpoint", "event_type", "started_at", "ended_at", "attributes", "content_reference", "parent_event_id")
-            values = dict(zip(names, args)); values.update(kwargs); values.setdefault("attributes", {}); values.setdefault("content_reference", None); values.setdefault("parent_event_id", None)
+            names = ("event_id", "schema_version", "experiment_id", "run_id", "episode_id", "replication_id", "sequence_number", "checkpoint", "event_type", "started_at", "ended_at", "attributes", "content_reference", "parent_event_id", "extensions")
+            values = dict(zip(names, args)); values.update(kwargs); values.setdefault("attributes", {}); values.setdefault("content_reference", None); values.setdefault("parent_event_id", None); values.setdefault("extensions", {})
         for name in ("event_id", "schema_version", "experiment_id", "run_id", "episode_id", "checkpoint", "event_type", "started_at", "ended_at"):
             if not isinstance(values[name], str) or not values[name].strip(): raise ValueError(f"{name} must be a non-empty string")
         if not legacy and not _SEMVER.fullmatch(values["schema_version"]): raise ValueError("schema_version must be SemVer")
         if not isinstance(values["replication_id"], int) or values["replication_id"] < 0: raise ValueError("replication_id must be non-negative")
         if not isinstance(values["sequence_number"], int) or values["sequence_number"] < 0: raise ValueError("sequence_number must be non-negative")
         if not isinstance(values["attributes"], Mapping): raise ValueError("attributes must be an object")
+        if not isinstance(values["extensions"], Mapping): raise ValueError("extensions must be an object")
         for name in ("content_reference", "parent_event_id"):
             if values[name] is not None and (not isinstance(values[name], str) or not values[name].strip()):
                 raise ValueError(f"{name} must be a non-empty string when provided")
@@ -55,7 +56,7 @@ class LifecycleEvent:
     def data(self) -> Mapping[str, Any]: return self.attributes
     def to_dict(self) -> dict[str, Any]:
         if self._legacy: return {"type": self.event_type, "run_id": self.run_id, "occurred_at": self.ended_at, "data": dict(self.attributes)}
-        return {"event_id": self.event_id, "schema_version": self.schema_version, "experiment_id": self.experiment_id, "run_id": self.run_id, "episode_id": self.episode_id, "replication_id": self.replication_id, "sequence_number": self.sequence_number, "checkpoint": self.checkpoint, "event_type": self.event_type, "started_at": self.started_at, "ended_at": self.ended_at, "attributes": dict(self.attributes), "content_reference": self.content_reference, "parent_event_id": self.parent_event_id}
+        return {"event_id": self.event_id, "schema_version": self.schema_version, "experiment_id": self.experiment_id, "run_id": self.run_id, "episode_id": self.episode_id, "replication_id": self.replication_id, "sequence_number": self.sequence_number, "checkpoint": self.checkpoint, "event_type": self.event_type, "started_at": self.started_at, "ended_at": self.ended_at, "attributes": dict(self.attributes), "content_reference": self.content_reference, "parent_event_id": self.parent_event_id, "extensions": dict(self.extensions)}
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "LifecycleEvent":
         payload = dict(value)
