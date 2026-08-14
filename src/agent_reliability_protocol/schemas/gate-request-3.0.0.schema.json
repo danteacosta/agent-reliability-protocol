@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-reliability-protocol.dev/schemas/gate-request-3.0.0.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "run_id", "checkpoint", "requested_at", "policy_version", "required_evidence", "decision_authority", "capture_policy", "extensions"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^3\\.[0-9]+\\.[0-9]+"},
+    "gate_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "checkpoint": {"type": "string", "minLength": 1},
+    "requested_at": {"type": "string", "minLength": 1},
+    "policy_version": {"type": "string", "minLength": 1},
+    "required_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "decision_authority": {"type": "string", "minLength": 1},
+    "capture_policy": {"enum": ["none", "metadata", "redacted", "full"]},
+    "extensions": {"type": "object", "additionalProperties": true}
+  }
+}

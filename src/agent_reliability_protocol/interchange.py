@@ -6,8 +6,18 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 from agent_reliability_protocol.contracts import CapturePolicy, EvidenceReference, GateDecision, GateRequest, RunManifest
 from agent_reliability_protocol.events import LifecycleEvent, LIFECYCLE_CHECKPOINTS, validate_lifecycle_sequence
+from agent_reliability_protocol.v3 import (
+    EpisodeIdentity as EpisodeIdentityV3,
+    EvidenceRecord as EvidenceRecordV3,
+    GateDecision as GateDecisionV3,
+    GateRequest as GateRequestV3,
+    LifecycleEvent as LifecycleEventV3,
+    RunManifest as RunManifestV3,
+    validate_lifecycle_sequence as validate_lifecycle_sequence_v3,
+)
+from agent_reliability_protocol.neutral import assert_neutral_contract
 
-ContractKind = Literal["decision", "event", "manifest", "sequence", "envelope", "evidence", "gate-request"]
+ContractKind = Literal["decision", "event", "manifest", "episode", "sequence", "envelope", "evidence", "gate-request"]
 CaptureContent = CapturePolicy
 _SECRET_MARKERS = ("secret", "token", "password", "authorization", "cookie", "api_key", "prompt", "artifact", "tool_arguments", "retrieved_content", "pii")
 
@@ -29,12 +39,21 @@ def export_contract(value: Any, path: Path | str, *, redact: bool = True, captur
 def check_contract(kind: ContractKind, payload: Mapping[str, Any]) -> list[str]:
     try:
         json.dumps(payload, ensure_ascii=True)
-        if kind == "decision": GateDecision.from_dict(payload)
-        elif kind == "event": LifecycleEvent.from_dict(payload)
-        elif kind == "manifest": RunManifest.from_dict(payload)
-        elif kind == "evidence": EvidenceReference.from_dict(payload)
-        elif kind == "gate-request": GateRequest.from_dict(payload)
-        elif kind == "sequence": validate_lifecycle_sequence(payload.get("events", ()))
+        is_v3 = str(payload.get("schema_version", "")).startswith("3.")
+        if is_v3:
+            assert_neutral_contract(payload)
+        if kind == "decision": (GateDecisionV3 if is_v3 else GateDecision).from_dict(payload)
+        elif kind == "event": (LifecycleEventV3 if is_v3 else LifecycleEvent).from_dict(payload)
+        elif kind == "manifest": (RunManifestV3 if is_v3 else RunManifest).from_dict(payload)
+        elif kind == "episode": EpisodeIdentityV3.from_dict(payload)
+        elif kind == "evidence": (EvidenceRecordV3 if is_v3 else EvidenceReference).from_dict(payload)
+        elif kind == "gate-request": (GateRequestV3 if is_v3 else GateRequest).from_dict(payload)
+        elif kind == "sequence":
+            events = payload.get("events", ())
+            if events and str(events[0].get("schema_version", "")).startswith("3."):
+                validate_lifecycle_sequence_v3([LifecycleEventV3.from_dict(event) for event in events])
+            else:
+                validate_lifecycle_sequence(events)
         elif kind == "envelope": validate_thesis_envelope(payload["manifest"], payload["events"])
         else: return [f"unknown contract kind: {kind}"]
     except (KeyError, TypeError, ValueError) as exc: return [str(exc)]
@@ -87,6 +106,8 @@ def validate_run_directory(path: Path | str) -> list[str]:
     if not manifest_path.is_file(): return ["missing manifest.json"]
     try: manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc: return [f"invalid manifest.json: {exc.msg}"]
+    if str(manifest.get("schema_version", "")).startswith("3."):
+        return validate_run_directory_v3(directory, manifest, events_path)
     errors.extend(f"manifest: {e}" for e in check_contract("manifest", manifest))
     for name, reference in (manifest.get("artifacts") or {}).items():
         if isinstance(reference, str) and "://" not in reference and not (directory / reference).exists(): errors.append(f"manifest artifact {name!r} does not exist: {reference}")
@@ -109,6 +130,41 @@ def validate_run_directory(path: Path | str) -> list[str]:
     if parsed_events:
         try:
             validate_lifecycle_sequence(parsed_events)
+        except ValueError as exc:
+            errors.append(f"events.jsonl: lifecycle envelope invalid: {exc}")
+    return errors
+
+
+def validate_run_directory_v3(directory: Path, manifest: Mapping[str, Any] | None = None, events_path: Path | None = None) -> list[str]:
+    """Validate a v3 manifest and its JSONL lifecycle envelope."""
+    errors: list[str] = []
+    manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    events_path = events_path or directory / "events.jsonl"
+    try:
+        assert_neutral_contract(manifest)
+        parsed_manifest = RunManifestV3.from_dict(manifest)
+    except (KeyError, TypeError, ValueError) as exc:
+        return [f"manifest: {exc}"]
+    if not events_path.is_file():
+        return ["missing events.jsonl"]
+    parsed_events: list[LifecycleEventV3] = []
+    seen: set[str] = set()
+    for line_number, line in enumerate(events_path.read_text(encoding="utf-8").splitlines(), 1):
+        try:
+            event_payload = json.loads(line)
+            assert_neutral_contract(event_payload)
+            parsed = LifecycleEventV3.from_dict(event_payload)
+            if parsed.run_id != parsed_manifest.run_id:
+                raise ValueError("run_id does not match manifest")
+            if parsed.event_id in seen:
+                raise ValueError("duplicate event_id")
+            seen.add(parsed.event_id)
+            parsed_events.append(parsed)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            errors.append(f"events.jsonl:{line_number}: {exc}")
+    if parsed_events:
+        try:
+            validate_lifecycle_sequence_v3(parsed_events)
         except ValueError as exc:
             errors.append(f"events.jsonl: lifecycle envelope invalid: {exc}")
     return errors

@@ -1,0 +1,12 @@
+{
+  "schema_version": "3.0.0",
+  "gate_id": "gate-1",
+  "run_id": "run-1",
+  "checkpoint": "release.gate",
+  "requested_at": "2026-08-14T00:01:00+00:00",
+  "policy_version": "delivery/1.0.0",
+  "required_evidence": ["e-1"],
+  "decision_authority": "human",
+  "capture_policy": "metadata",
+  "extensions": {}
+}

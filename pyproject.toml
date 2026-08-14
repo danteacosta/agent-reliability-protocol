@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-reliability-protocol"
-version = "2.1.0"
+version = "3.0.0"
 description = "Neutral, portable reliability contracts for agentic systems"
 requires-python = ">=3.11"
 readme = "README.md"
@@ -21,4 +21,4 @@ pythonpath = ["src"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-agent_reliability_protocol = ["schemas/*.json", "fixtures/v1/*.json", "fixtures/v2/*.json"]
+agent_reliability_protocol = ["schemas/*.json", "fixtures/v1/*.json", "fixtures/v2/*.json", "fixtures/v3/*.json"]

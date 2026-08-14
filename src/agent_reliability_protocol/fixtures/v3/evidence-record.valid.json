@@ -1,0 +1,15 @@
+{
+  "schema_version": "3.0.0",
+  "evidence_id": "e-1",
+  "run_id": "run-1",
+  "claim": "required_checks_satisfied",
+  "observed": true,
+  "expected": true,
+  "comparator": "equals",
+  "stage": "final_artifact",
+  "source_event_id": "event-1",
+  "artifact_uri": "artifacts/verification.json",
+  "artifact_hash": "sha256:artifact",
+  "capture_policy": "metadata",
+  "extensions": {}
+}

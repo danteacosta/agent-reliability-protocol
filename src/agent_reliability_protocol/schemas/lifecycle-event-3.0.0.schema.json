@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-reliability-protocol.dev/schemas/lifecycle-event-3.0.0.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "run_id", "episode_id", "sequence_number", "checkpoint", "event_type", "started_at", "ended_at", "attributes", "content_reference", "parent_event_id", "extensions"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^3\\.[0-9]+\\.[0-9]+"},
+    "event_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "episode_id": {"type": "string", "minLength": 1},
+    "sequence_number": {"type": "integer", "minimum": 0},
+    "checkpoint": {"type": "string", "minLength": 1},
+    "event_type": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "minLength": 1},
+    "ended_at": {"type": "string", "minLength": 1},
+    "attributes": {"type": "object"},
+    "content_reference": {"type": ["string", "null"]},
+    "parent_event_id": {"type": ["string", "null"]},
+    "extensions": {"type": "object", "additionalProperties": true}
+  }
+}

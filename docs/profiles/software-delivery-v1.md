@@ -1,34 +1,35 @@
 # ARP Profile: `software-delivery/v1`
 
-Status: Draft 1.0
+Status: Final profile for ARP 3.0
 
-This profile maps a merge-gated software delivery system onto the neutral
-Agent Reliability Protocol (ARP). It does not add delivery semantics to ARP's
-core records. Delivery-specific facts live in namespaced extensions and
-referenced artifacts.
+This profile maps merge-gated software delivery onto the neutral ARP 3.0
+contract. It does not add delivery semantics to ARP core records. Delivery
+facts live in this namespaced extension and in referenced verification
+artifacts.
 
 ## Mapping
 
-| Delivery concept | ARP representation |
+| Delivery concept | ARP 3.0 representation |
 | --- | --- |
-| One `WorkAttempt` | One `RunManifest` with `run_id = attempt_id` |
-| Work item identity | `workload_id` and `extensions[software-delivery/v1].work_item_id` |
-| Agent session/episode | `EpisodeIdentity.episode_id` |
-| Repository revision used as base | `git_sha` |
-| Tracker/graph snapshot | `dataset_id` and `dataset_hash` |
-| Scheduler and policy configuration | `configuration_hash` |
-| Agent runtime identity | `model_provider`, `model_name`, `model_version` |
-| Delivery observations | `EvidenceReference` plus a verification artifact |
-| Pending human or automated gate | `GateRequest` |
-| Resolved gate | `GateDecision` and lifecycle event `gate.decided` |
+| One `WorkAttempt` | One `RunManifestV3`, with `run_id = attempt_id` |
+| Repository base revision | `source.revision` |
+| Tracker/graph snapshot | `source.input_ref` and `source.input_hash` |
+| Scheduler/policy configuration | `configuration_hash` |
+| Agent runtime identity | `executor.name`/`executor.version`; provider-specific details remain in this profile extension |
+| Agent episode | `EpisodeIdentityV3` and lifecycle events |
+| Delivery observation | `EvidenceRecord` plus a verification artifact |
+| Pending human or automated gate | `GateRequestV3` |
+| Resolved gate | `GateDecisionV3` and `gate.decided` lifecycle event |
 
-For the current ARP manifest shape, `dataset_id` means the canonical input
-snapshot used to schedule the attempt, not a training dataset. The adapter
-MUST document that mapping and provide a deterministic `dataset_hash`.
+The adapter MUST use `source.revision` for the exact base revision used to
+create the workspace. The graph snapshot is an input to scheduling and MUST
+have a deterministic reference and hash. A delivery adapter MUST NOT encode a
+commit SHA as a numeric observation.
 
 ## Extension namespace
 
-Delivery adapters MAY use the `software-delivery/v1` namespace:
+The only delivery-specific namespace defined by this profile is
+`software-delivery/v1`:
 
 ```json
 {
@@ -37,54 +38,68 @@ Delivery adapters MAY use the `software-delivery/v1` namespace:
       "work_item_id": "PAY-104",
       "attempt_id": "attempt-1",
       "wave_id": "wave-2",
-      "base_sha": "abc123",
-      "head_sha": "def456",
+      "workspace_id": "workspace-1",
       "pull_request_ref": "github:pr/123",
-      "merge_commit_sha": "fedcba"
+      "head_revision": "def456",
+      "merge_revision": "fedcba"
     }
   }
 }
 ```
 
-These fields are not part of the neutral ARP core and are ignored by
-consumers that do not understand this profile.
+Fields inside this namespace are opaque to ARP consumers that do not implement
+the profile. The control plane owns their meaning and independently verifies
+them against Git, the tracker, CI, and review systems.
 
 ## Verification artifact
 
-The adapter SHOULD emit a structured artifact for delivery verification:
+The adapter SHOULD emit one immutable artifact per delivery verification:
 
 ```json
 {
   "work_item_id": "PAY-104",
-  "base_sha": "abc123",
-  "head_sha": "def456",
-  "ci_checked_head_sha": "def456",
+  "attempt_id": "attempt-1",
+  "base_revision": "abc123",
+  "head_revision": "def456",
+  "ci_checked_revision": "def456",
   "ci_status": "passing",
   "reviews_resolved": true,
   "scope_check": "pass",
   "merged": true,
-  "merge_commit_sha": "fedcba"
+  "merge_revision": "fedcba",
+  "observed_at": "2026-08-14T00:01:00+00:00"
 }
 ```
 
-The ARP evidence reference points to this artifact and records generic claims
-such as `artifact_matches_expected_revision` or `required_checks_satisfied`.
-The adapter MUST NOT encode SHA values as numeric metrics.
+The corresponding `EvidenceRecord` uses generic claims such as
+`artifact_matches_expected_revision` and `required_checks_satisfied`, points
+to the artifact, and records its hash. The artifact is the source of truth for
+the delivery-specific fields; the ARP record is the portable claim and
+provenance envelope.
 
-## Gate policy
+## Gate semantics
 
-- A `GateRequest` is emitted when required evidence is complete and a decision
-  is needed.
-- No ARP `GateDecision` is emitted for a merely pending gate.
-- A verified approval emits `GateDecision(decision="approve")`.
-- Missing, stale, contradictory, or failed evidence emits `block`, `warn`, or
-  `request_clarification` according to the delivery policy.
-- A human merge is represented by the delivery artifact and the resulting
-  generic gate decision; ARP does not gain a `merge` checkpoint.
+- Emit `GateRequestV3` when required evidence is available and a decision is
+  pending.
+- Do not emit a `GateDecisionV3` for a merely pending human merge.
+- Emit `approve` only after the configured authority has resolved the gate and
+  the core has independently verified the evidence.
+- Emit `block`, `warn`, or `request_clarification` only for an actual resolved
+  outcome, according to the delivery policy.
+- A merge is profile evidence, not an ARP lifecycle checkpoint.
+- Downstream dispatch requires an approved gate and a newly observed base
+  revision after merge.
 
 ## Capture policy
 
-The adapter MUST record the effective capture policy. `metadata` or `redacted`
-is the default for delivery runs. `full` requires explicit operator policy
-because source diffs, prompts, tool arguments, and review material may contain
-secrets or personal data.
+The adapter MUST record the effective policy on every v3 record. `metadata` or
+`redacted` is the default for delivery. `full` requires explicit operator
+authorization because diffs, prompts, tool arguments, review content, and
+tracker data can contain secrets or personal data. `none` records no captured
+content while preserving the contract identity and decision metadata.
+
+## Compatibility
+
+ARP 2.x delivery records can be read and adapted to v3. Legacy delivery keys
+are preserved only under `arp-compat/v2`; new delivery producers MUST emit v3
+records and this profile.
