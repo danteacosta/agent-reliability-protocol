@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-reliability-protocol.dev/schemas/evidence-record-3.0.0.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evidence_id", "run_id", "claim", "observed", "expected", "comparator", "stage", "source_event_id", "artifact_uri", "artifact_hash", "capture_policy", "extensions"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^3\\.[0-9]+\\.[0-9]+"},
+    "evidence_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "claim": {"type": "string", "minLength": 1},
+    "observed": {"type": ["string", "number", "boolean", "null"]},
+    "expected": {"type": ["string", "number", "boolean", "null"]},
+    "comparator": {"type": ["string", "null"]},
+    "stage": {"enum": ["pre_final", "final_artifact", "terminal_label"]},
+    "source_event_id": {"type": ["string", "null"]},
+    "artifact_uri": {"type": ["string", "null"]},
+    "artifact_hash": {"type": ["string", "null"]},
+    "capture_policy": {"enum": ["none", "metadata", "redacted", "full"]},
+    "extensions": {"type": "object", "additionalProperties": true}
+  }
+}

@@ -7,11 +7,11 @@ stable.
 
 `agent-reliability-protocol` (ARP) is a dependency-free, neutral contract for
 recording reproducible runs, episode lifecycle events, evidence, and gate
-decisions across agent systems. The current development line is ARP `2.1.0`:
-it adds generic scalar claims, pending gate requests, capture policy, profiles,
-and namespaced extensions while preserving the ARP 2.0.5 wire contract:
-new records carry a SemVer `schema_version`; v0.1 manifests/events remain
-readable through compatibility adapters.
+decisions across agent systems. The current release line is ARP `3.0.0`:
+new producers emit a generic v3 wire contract while explicit adapters keep
+v0.1/2.x payloads readable. v3 removes domain-shaped manifest requirements;
+delivery, retrieval, and requirement-quality facts live in profiles and
+namespaced extensions.
 
 SemVer policy: patches correct behavior without structural change; minors add
 optional fields; majors remove, rename, or alter the meaning of a field. The
@@ -21,10 +21,17 @@ into the canonical representation; `upgrade_manifest` preserves the v0.1
 normal form for old consumers.
 
 ```python
-from agent_reliability_protocol import EpisodeIdentity, RunManifest
+from agent_reliability_protocol import EpisodeIdentityV3, ExecutorIdentity, RunManifestV3, SourceIdentity
 
-identity = EpisodeIdentity("experiment-1", "run-123", "episode-1", 0, "workload-1")
-manifest = RunManifest("2.0.5", "experiment-1", "run-123", "2026-07-30T00:00:00+00:00", "abc123", "harness", "1.0.0", "dataset", "sha256:...", "sha256:...", "provider", "model", "version", 7, 1, {"runtime": "ci"})
+identity = EpisodeIdentityV3("run-123", "episode-1")
+manifest = RunManifestV3(
+    run_id="run-123",
+    created_at="2026-08-14T00:00:00+00:00",
+    source=SourceIdentity(revision="abc123"),
+    executor=ExecutorIdentity("agent-runtime", "1.0.0"),
+    configuration_hash="sha256:...",
+    environment={},
+)
 ```
 
 Validate a JSON document without network access:
@@ -44,7 +51,15 @@ opaque, namespaced `extensions` payload. Capture policy is explicit:
 `none`, `metadata`, `redacted`, or `full`; `redacted` removes prompts,
 artifacts, tool arguments, retrieved content, PII, and secrets.
 
-The merge-gated delivery integration is documented in
+For migration, use the `*V3` exports for new producers and the explicit
+`adapt_manifest_v2_to_v3`, `adapt_event_v2`, `adapt_evidence_v2`,
+`adapt_gate_request_v2`, and `adapt_decision_v2` adapters when reading older
+payloads. The legacy top-level classes remain available for compatibility but
+are not the v3 emission surface.
+
+The ARP 3.0 design is documented in
+[docs/superpowers/specs/2026-08-14-arp-3-0-design.md](docs/superpowers/specs/2026-08-14-arp-3-0-design.md).
+The merge-gated delivery profile is documented in
 [docs/profiles/software-delivery-v1.md](docs/profiles/software-delivery-v1.md).
 The final control-plane specification is documented in
 [docs/merge-gated-delivery-control-plane-spec.md](docs/merge-gated-delivery-control-plane-spec.md).

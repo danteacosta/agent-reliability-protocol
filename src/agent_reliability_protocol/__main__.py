@@ -10,7 +10,7 @@ from agent_reliability_protocol.interchange import check_contract, validate_run_
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate an Agent Reliability Protocol JSON contract.")
     parser.add_argument("check", nargs="?", default="check")
-    parser.add_argument("--kind", choices=("decision", "event", "manifest"))
+    parser.add_argument("--kind", choices=("decision", "event", "manifest", "episode", "evidence", "gate-request"))
     parser.add_argument("--input", type=Path)
     parser.add_argument("--run-directory", type=Path)
     args = parser.parse_args(argv)

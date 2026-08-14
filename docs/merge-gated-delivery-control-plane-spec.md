@@ -1,113 +1,88 @@
 # Merge-Gated, Dependency-Aware Agentic Delivery Control Plane
 
-Status: Draft v1.0
+Status: Final v2.0 — ARP 3.0 integration
 
 License intent: Apache-2.0
 
-Positioning: model-agnostic, evidence-based software delivery orchestration.
-This project is inspired by Symphony, Gas Town, Agent Orchestrator, and
-wave-based schedulers, but makes no compatibility claim with any of them.
+## 1. Summary
 
-## 1. One-line description
+A model-agnostic control plane that turns an explicit work-item dependency
+graph into isolated agent executions and releases downstream work only after
+independently verified quality gates and an updated base revision.
 
-A control plane that turns an explicit work-item dependency graph into isolated
-agent executions and releases downstream work only after independently verified
-quality gates and an updated base branch.
+The control plane coordinates work. It does not write application code, host a
+chat UI, or trust an agent's completion message as authority.
 
-## 2. Problem
+> Agents propose work and produce claims. The control plane verifies external
+> state and records portable evidence before releasing dependent work.
 
-Coding agents can implement tickets in parallel, but an agent's completion
-message is not proof that a PR is correctly scoped, that CI ran against the
-current commit, that reviews are resolved, or that a dependency was actually
-merged into the branch used for downstream work.
+## 2. Scope and non-goals
 
-The control plane separates production from authority:
+Version 1 supports one repository, one tracker project, isolated Git
+workspaces, pull requests, CI/review observation, explicit dependencies, and a
+human merge gate. It supports two scheduling policies:
 
-> Agents produce work and evidence. The core verifies delivery state from the
-> tracker, Git, CI, reviews, and gate records.
+- `continuous_frontier`: dispatch every item whose direct blockers are
+  independently verified as done;
+- `wave_barrier`: dispatch a closed batch from one base revision, then wait for
+  the entire batch to pass its release gate.
 
-## 3. Scope
+It does not provide a chat UI or IDE, automatic merge, automatic conflict
+resolution, replacement CI, inferred dependencies, multi-repository
+coordination, provider-specific scheduler logic, or a mandatory dashboard.
 
-The first release supports one repository, one tracker project, isolated local
-Git worktrees, pull requests, CI/review observation, and human-gated merge.
-The scheduler supports two project-wide execution policies:
+## 3. Work-item contract
 
-- `continuous_frontier`: dispatch every item whose explicit blockers are done;
-- `wave_barrier`: dispatch a closed batch from one `base_sha`, then wait for the
-  whole batch to pass its release gate before opening the next batch.
+A tracker item is an executable prompt, not a title fragment. It contains:
 
-## 4. Non-goals
-
-- chat UI or IDE;
-- automatic merge;
-- automatic conflict resolution;
-- replacing CI or code review;
-- inferring dependencies from ticket titles;
-- multi-repository coordination in v1;
-- provider-specific agent logic in the scheduler;
-- a mandatory dashboard in the first public release.
-
-## 5. Domain model
-
-### WorkItem
-
-Each work item is an executable contract containing:
-
-- imperative title;
+- an imperative, specific title;
 - problem and expected behavior;
-- explicit in-scope and out-of-scope sections;
-- affected paths;
-- acceptance criteria;
-- test scenarios;
-- explicit `blocked_by`, including an empty list when there are no blockers;
-- risk level and rollout/kill-switch information when required;
-- relevant events and metrics.
+- in-scope and explicitly out-of-scope sections;
+- affected modules, functions, and paths;
+- acceptance criteria and test scenarios;
+- explicit `blocked_by`, including `[]` when unblocked;
+- risk, rollout, kill-switch, events, and metrics when applicable;
+- i18n, privacy, factory, migration, and schema requirements when applicable.
 
-Tickets that only add tests, migrations, schema changes, or future foundation
-code are rejected by the authoring validator. Tests and migrations belong to
-the behavior-changing ticket.
+Tests and migrations belong to the behavior-changing item. A standalone test,
+migration, schema, or speculative foundation item is rejected by the authoring
+validator. Items above five points are split, and non-trivial pull requests
+target approximately 400 changed lines or less.
 
-### DependencyGraph
+## 4. Domain model
 
-The graph contains explicit nodes and `blocked_by` edges. The compiler rejects:
+### Dependency graph
 
-- missing blocker references;
-- cycles, including the exact cycle path;
-- malformed work-item contracts.
+The graph contains explicit nodes and `blocked_by` edges. Compilation rejects
+missing blockers, cycles with the exact cycle path, malformed work-item
+contracts, and duplicate identities. Dependencies are never inferred from
+titles or prose.
 
-The graph is never inferred from title or description text.
-
-### WorkAttempt
-
-An attempt records one execution of one work item:
+### Work attempt
 
 ```text
 WorkAttempt {
-  id
+  attempt_id
   work_item_id
-  base_sha
+  base_revision
   workspace_id
-  agent_runtime
+  runtime_ref
   started_at
   state
 }
 ```
 
-Retries create a new attempt and preserve a reference to the prior attempt in
-the event log.
+Retries create a new attempt and retain a reference to the previous attempt in
+the local event log and ARP extension.
 
-### DeliveryVerification
+### Delivery verification
 
-This is an internal, delivery-specific record. It may contain PR URLs, commit
-SHAs, CI conclusions, review state, affected paths, and scope analysis. It is
-not an ARP type.
+`DeliveryVerification` is an internal delivery record containing PR, revision,
+CI, review, scope, merge, and acceptance-signal observations. It is not an
+ARP core type. The reliability adapter projects it to an ARP 3.0
+`EvidenceRecord` and an immutable `software-delivery/v1` artifact.
 
-The ARP integration adapter projects it into generic evidence references and a
-delivery profile artifact.
-
-### HumanGate
-
-The internal gate lifecycle is:
+### Human gate
 
 ```text
 pending → approved
@@ -115,50 +90,51 @@ pending → approved
         ↘ needs_attention
 ```
 
-Only an independently observed merge can produce `approved` for the merge
-gate.
+`pending` is represented by ARP `GateRequestV3`; only a resolved state produces
+`GateDecisionV3`. A pending merge is never encoded as `block`.
 
-## 6. Authority boundary
+## 5. Authority boundary
 
-The core may accept a transition only after independently verifying:
+The core accepts a release transition only after independently verifying:
 
 1. the PR exists and is linked to the work item;
-2. the branch was created from the expected base or is current with it;
-3. CI checks refer to the PR's current head SHA;
+2. the workspace was created from the expected base revision;
+3. CI checks refer to the PR's current head revision;
 4. required reviews are resolved;
-5. the diff is within declared scope, with v1 best-effort warnings;
-6. acceptance criteria signals are recorded but are not trusted alone;
-7. the merge actually occurred in the base branch;
-8. the new base SHA was captured before dependent dispatch.
+5. the diff is inside declared scope, with best-effort warnings in v1;
+6. acceptance signals and agent claims are recorded but are not authority;
+7. the merge exists in the target base branch;
+8. a fresh base revision has been observed before dependent dispatch.
 
 An agent cannot mark a ticket done, satisfy a gate, or unblock a dependency by
-self-report alone.
+self-report alone. Contradictory or stale observations stop downstream
+dispatch.
 
-## 7. Wave semantics
+## 6. Waves and base revisions
 
 ### Continuous frontier
 
-Every attempt captures its own `base_sha` at dispatch. An item becomes eligible
-when every direct blocker reaches verified `Done`.
+Each attempt captures its own `base_revision` at dispatch. An item is eligible
+only when every direct blocker has a verified release decision and current
+tracker/Git state.
 
 ### Wave barrier
-
-An `ExecutionWave` has a closed item list and one shared `base_sha`:
 
 ```text
 ExecutionWave {
   wave_id
-  base_sha
+  base_revision
   work_item_ids
   state: open | closed
 }
 ```
 
-No item in wave N+1 is dispatched until every item in wave N has passed its
-gate. The scheduler then fetches the updated base branch and creates all new
-workspaces from the resulting SHA.
+Every item in a wave is created from the same base revision. No item in wave
+N+1 is dispatched until every item in wave N passes its gate. The scheduler
+then fetches `origin/main`, records the new revision, and creates all next-wave
+workspaces from that revision.
 
-## 8. System boundaries
+## 7. System boundaries and ports
 
 ```text
 Tracker Adapter
@@ -170,10 +146,12 @@ Tracker Adapter
   → PR/CI/Review Observers
   → DeliveryVerification
   → Gate Evaluator
+  → ReliabilityRecorder
   → Reconciliation Loop
 ```
 
-The core interfaces are:
+The core owns these ports and has no ARP, model-provider, tracker SDK, or Git
+provider dependency:
 
 ```typescript
 interface AgentRuntime {
@@ -194,60 +172,79 @@ interface TrackerAdapter {
 
 interface ReliabilityRecorder {
   recordRun(run: RunRecord): Promise<void>
-  recordLifecycle(event: LifecycleRecord): Promise<void>
+  recordEpisode(event: EpisodeRecord): Promise<void>
   recordEvidence(evidence: EvidenceRecord): Promise<void>
-  recordGate(decision: GateRecord): Promise<void>
+  requestGate(request: GateRequest): Promise<void>
+  decideGate(decision: GateDecision): Promise<void>
 }
 ```
 
-`ReliabilityRecorder` is a port. The ARP implementation lives in an adapter
-package and emits the `software-delivery/v1` profile. The control-plane core
-does not import ARP.
+The ARP adapter is the only component that knows the ARP package. It maps:
 
-Required v1 adapters:
+```text
+WorkAttempt          → RunManifestV3 + EpisodeIdentityV3
+DeliveryVerification → EvidenceRecord + delivery artifact
+HumanGate pending    → GateRequestV3
+HumanGate result     → GateDecisionV3
+```
 
-- Linear tracker;
-- GitHub pull request/CI/review observer;
-- Git worktree workspace factory;
-- ACP agent runtime;
-- generic CLI runtime fallback;
-- ARP reliability recorder.
+Required v1 adapters are Linear, GitHub pull request/CI/review observation,
+Git worktree creation, an ACP runtime, a generic CLI runtime fallback, and an
+ARP 3.0 reliability recorder.
 
-## 9. State and recovery
+## 8. ARP 3.0 recording contract
 
-The orchestrator owns scheduling state. State transitions are appended to a
-SQLite-backed event log and reconstructed by folding events. External systems
-remain authoritative for tracker state, Git refs, PRs, CI, reviews, and merges.
+The control plane emits `profile = software-delivery/v1` and uses:
 
-Polling is the v1 default. Webhooks are an optimization, never the only source
-of truth. On restart, the reconciler must avoid duplicate dispatches by joining
-local attempts with current tracker and Git state.
+- `source.revision` for the exact workspace base revision;
+- `source.input_ref` and `source.input_hash` for the normalized graph/tracker
+  snapshot;
+- `executor.name` and `executor.version` for the runtime abstraction;
+- `configuration_hash` for scheduler and policy configuration;
+- namespaced extensions for work item, attempt, wave, workspace, PR, head,
+  merge, CI, and review references;
+- immutable artifacts for detailed delivery verification;
+- generic evidence claims and evidence IDs for gate records.
+
+The core does not put `blocked_by`, `wave`, PR URLs, CI provider names, merge
+states, or domain metrics into ARP core fields. `merge` is evidence in the
+delivery profile, not a new ARP lifecycle checkpoint.
+
+## 9. State, persistence, and recovery
+
+The orchestrator owns scheduling state. Local transitions are appended to a
+SQLite event log and reconstructed by folding events. Git refs, tracker state,
+PRs, CI, reviews, and merge state remain authoritative in their external
+systems.
+
+Polling is the v1 default. Webhooks optimize latency but are never the only
+source of truth. On restart, reconciliation joins local attempts to current
+tracker and Git state before dispatching; idempotency keys prevent duplicate
+workspaces and duplicate gate records.
 
 ## 10. Safety and privacy
 
-- agents run only inside their assigned workspace;
-- workspace paths must remain under the configured root;
-- provider credentials are not copied into untrusted child environments;
-- capture policy is explicit: `none`, `metadata`, `redacted`, or `full`;
-- high-risk tickets require rollout and kill-switch metadata;
-- unresolved evidence conflicts stop downstream dispatch;
-- source, prompt, tool, and review content defaults to redacted or metadata-only
-  capture.
+- agent processes run only inside their assigned workspace;
+- workspace paths remain under the configured root;
+- credentials are not copied into untrusted child environments;
+- capture policy is explicit on every ARP 3.0 record;
+- metadata or redacted capture is the default;
+- full capture requires operator authorization;
+- high-risk work requires rollout and kill-switch metadata;
+- evidence conflicts and stale CI halt downstream release;
+- prompts, diffs, tool arguments, review text, and personal data are never
+  captured by default.
 
 ## 11. Acceptance demo
 
-Three independent tickets enter Wave 1 simultaneously. A fourth ticket is
-blocked by all three.
+The simulator must reproduce this flow without Git, a tracker, or a real agent:
 
-The system must show that:
-
-1. all three roots receive workspaces from the same base SHA;
-2. the fourth ticket is not dispatched;
-3. agent self-report cannot satisfy the gate;
-4. stale CI is classified as unknown rather than passing;
-5. only independently verified merges satisfy the three blockers;
-6. the scheduler captures the new `origin/main` SHA;
-7. the fourth ticket receives a fresh workspace from that SHA.
-
-The simulator must reproduce this flow without Git, a tracker, or a real
-agent before the integration path is considered complete.
+1. three independent tickets enter wave 1;
+2. all three roots receive workspaces from the same base revision;
+3. a fourth ticket blocked by all three is not dispatched;
+4. an agent completion message cannot satisfy any gate;
+5. stale CI is classified as unknown, not passing;
+6. only independently verified merges produce approved gate decisions;
+7. the scheduler fetches and records the new `origin/main` revision;
+8. the fourth ticket receives a fresh workspace from that revision;
+9. each run, evidence record, gate request, and decision validates as ARP 3.0.
