@@ -67,6 +67,13 @@ def assert_protocol_next_independent(package_root: Path | str) -> None:
 
 def _find_domain_keys(value: Any) -> set[str]:
     if isinstance(value, Mapping):
+        if "extensions" in value:
+            extension_namespaces = value["extensions"]
+            if not isinstance(extension_namespaces, Mapping):
+                raise ValueError("extensions must be an object")
+            if any(not isinstance(namespace, str) or not namespace.strip() for namespace in extension_namespaces):
+                raise ValueError("extensions namespace must be a non-empty string")
+            value = {key: item for key, item in value.items() if key != "extensions"}
         found = {str(key) for key in value if str(key) in _DOMAIN_KEYS}
         for item in value.values(): found.update(_find_domain_keys(item))
         return found

@@ -6,10 +6,18 @@ from enum import Enum
 import re
 from typing import Any, Literal, Mapping
 
-SCHEMA_VERSION = "2.0.5"
+SCHEMA_VERSION = "2.1.0"
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 DecisionOutcome = Literal["pass", "fail"]
 Decision = Literal["approve", "warn", "request_clarification", "block"]
+ScalarValue = str | int | float | bool | None
+
+
+class CapturePolicy(str, Enum):
+    NONE = "none"
+    METADATA = "metadata"
+    REDACTED = "redacted"
+    FULL = "full"
 
 
 def _nonempty(name: str, value: str) -> None:
@@ -17,6 +25,19 @@ def _nonempty(name: str, value: str) -> None:
 
 def _schema_version(value: str) -> None:
     if value not in {"arp/v1", "protocol_next/v1"} and not _SEMVER.fullmatch(value): raise ValueError("schema_version must be SemVer")
+
+
+def _scalar(name: str, value: ScalarValue) -> None:
+    if value is not None and not isinstance(value, (str, int, float, bool)):
+        raise ValueError(f"{name} must be a scalar")
+
+
+def _policy(value: CapturePolicy | str | None) -> None:
+    if value is not None:
+        try:
+            CapturePolicy(value)
+        except ValueError as exc:
+            raise ValueError("capture_policy must be one of: none, metadata, redacted, full") from exc
 
 
 @dataclass(frozen=True)
@@ -36,16 +57,62 @@ class EvidenceStage(str, Enum):
 
 @dataclass(frozen=True)
 class EvidenceReference:
-    evidence_id: str; event_id: str | None = None; artifact_uri: str | None = None; metric_name: str | None = None; observed_value: float | None = None; threshold: float | None = None; stage: EvidenceStage = EvidenceStage.PRE_FINAL
+    evidence_id: str
+    event_id: str | None = None
+    artifact_uri: str | None = None
+    metric_name: str | None = None
+    observed_value: float | None = None
+    threshold: float | None = None
+    stage: EvidenceStage = EvidenceStage.PRE_FINAL
+    subject_ref: str | None = None
+    claim: str | None = None
+    observed: ScalarValue = None
+    expected: ScalarValue = None
+    comparator: str | None = None
+    artifact_hash: str | None = None
+    capture_policy: CapturePolicy | str | None = None
     def __post_init__(self) -> None:
         _nonempty("evidence_id", self.evidence_id)
         if self.stage is EvidenceStage.PRE_FINAL and self.artifact_uri and any(token in self.artifact_uri.lower() for token in ("final", "label")):
             raise ValueError("pre_final evidence cannot reference a final artifact or terminal label")
         if self.observed_value is not None and not isinstance(self.observed_value, (int, float)): raise ValueError("observed_value must be numeric")
         if self.threshold is not None and not isinstance(self.threshold, (int, float)): raise ValueError("threshold must be numeric")
-    def to_dict(self) -> dict[str, Any]: return {"evidence_id": self.evidence_id, "event_id": self.event_id, "artifact_uri": self.artifact_uri, "metric_name": self.metric_name, "observed_value": self.observed_value, "threshold": self.threshold, "stage": self.stage.value}
+        _scalar("observed", self.observed); _scalar("expected", self.expected); _policy(self.capture_policy)
+        for name, value in (("subject_ref", self.subject_ref), ("claim", self.claim), ("comparator", self.comparator), ("artifact_hash", self.artifact_hash)):
+            if value is not None: _nonempty(name, value)
+    def to_dict(self) -> dict[str, Any]:
+        return {"evidence_id": self.evidence_id, "event_id": self.event_id, "artifact_uri": self.artifact_uri, "metric_name": self.metric_name, "observed_value": self.observed_value, "threshold": self.threshold, "stage": self.stage.value, "subject_ref": self.subject_ref, "claim": self.claim, "observed": self.observed, "expected": self.expected, "comparator": self.comparator, "artifact_hash": self.artifact_hash, "capture_policy": CapturePolicy(self.capture_policy).value if self.capture_policy is not None else None}
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "EvidenceReference": return cls(**{**dict(value), "stage": EvidenceStage(value.get("stage", EvidenceStage.PRE_FINAL))})
+    def from_dict(cls, value: Mapping[str, Any]) -> "EvidenceReference": return cls(**{**dict(value), "stage": EvidenceStage(value["stage"])})
+
+
+@dataclass(frozen=True)
+class GateRequest:
+    gate_id: str
+    run_id: str
+    checkpoint: str
+    policy_version: str
+    requested_at: str
+    required_evidence: tuple[str, ...] = ()
+    decision_authority: str | None = None
+    capture_policy: CapturePolicy | str | None = None
+    extensions: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for name in ("gate_id", "run_id", "checkpoint", "policy_version", "requested_at"):
+            _nonempty(name, getattr(self, name))
+        if any(not isinstance(item, str) or not item.strip() for item in self.required_evidence):
+            raise ValueError("required_evidence must contain non-empty strings")
+        if self.decision_authority is not None: _nonempty("decision_authority", self.decision_authority)
+        _policy(self.capture_policy)
+        if not isinstance(self.extensions, Mapping): raise ValueError("extensions must be an object")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"gate_id": self.gate_id, "run_id": self.run_id, "checkpoint": self.checkpoint, "policy_version": self.policy_version, "requested_at": self.requested_at, "required_evidence": list(self.required_evidence), "decision_authority": self.decision_authority, "capture_policy": CapturePolicy(self.capture_policy).value if self.capture_policy is not None else None, "extensions": dict(self.extensions)}
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "GateRequest":
+        return cls(**{**dict(value), "required_evidence": tuple(value["required_evidence"])})
 
 
 @dataclass(frozen=True)
@@ -64,14 +131,14 @@ class DecisionReason:
 
 @dataclass(frozen=True, init=False)
 class GateDecision:
-    decision: Decision; risk_score: float | None; confidence: float | None; checkpoint: str; reasons: tuple[DecisionReason, ...]; evidence: tuple[EvidenceReference, ...]; threshold_version: str; _legacy: bool = field(compare=False, repr=False)
-    def __init__(self, decision: Decision | None = None, risk_score: float | None = None, confidence: float | None = None, checkpoint: str = "gate.decided", reasons: tuple[DecisionReason, ...] = (), evidence: tuple[EvidenceReference, ...] = (), threshold_version: str = "legacy", *, outcome: DecisionOutcome | None = None) -> None:
+    decision: Decision; risk_score: float | None; confidence: float | None; checkpoint: str; reasons: tuple[DecisionReason, ...]; evidence: tuple[EvidenceReference, ...]; threshold_version: str; gate_id: str | None; decided_at: str | None; decision_authority: str | None; policy_version: str | None; capture_policy: CapturePolicy | str | None; extensions: Mapping[str, Any]; _legacy: bool = field(compare=False, repr=False)
+    def __init__(self, decision: Decision | None = None, risk_score: float | None = None, confidence: float | None = None, checkpoint: str = "gate.decided", reasons: tuple[DecisionReason, ...] = (), evidence: tuple[EvidenceReference, ...] = (), threshold_version: str = "legacy", *, outcome: DecisionOutcome | None = None, gate_id: str | None = None, decided_at: str | None = None, decision_authority: str | None = None, policy_version: str | None = None, capture_policy: CapturePolicy | str | None = None, extensions: Mapping[str, Any] | None = None) -> None:
         # Preserve the compact v0.1 positional form GateDecision("fail", reasons)
         # while exposing the explicit v2 fields to new callers.
         if decision in ("pass", "fail") and isinstance(risk_score, (tuple, list)) and not reasons:
             reasons = tuple(risk_score)
             risk_score = None
-        legacy = outcome is not None or decision in ("pass", "fail")
+        legacy = (outcome is not None or decision in ("pass", "fail")) and not any(value is not None for value in (gate_id, decided_at, decision_authority, policy_version, capture_policy)) and not extensions
         if outcome is None and decision in ("pass", "fail"): outcome, decision = decision, None  # type: ignore[assignment]
         if outcome is not None:
             if outcome not in ("pass", "fail"): raise ValueError("outcome must be 'pass' or 'fail'")
@@ -83,7 +150,10 @@ class GateDecision:
         for name, score in (("risk_score", risk_score), ("confidence", confidence)):
             if score is not None and (not isinstance(score, (int, float)) or not 0 <= score <= 1): raise ValueError(f"{name} must be between 0 and 1")
         _nonempty("checkpoint", checkpoint); _nonempty("threshold_version", threshold_version)
-        object.__setattr__(self, "decision", decision); object.__setattr__(self, "risk_score", risk_score); object.__setattr__(self, "confidence", confidence); object.__setattr__(self, "checkpoint", checkpoint); object.__setattr__(self, "reasons", tuple(reasons)); object.__setattr__(self, "evidence", tuple(evidence)); object.__setattr__(self, "threshold_version", threshold_version); object.__setattr__(self, "_legacy", legacy)
+        for name, value in (("gate_id", gate_id), ("decided_at", decided_at), ("decision_authority", decision_authority), ("policy_version", policy_version)):
+            if value is not None: _nonempty(name, value)
+        _policy(capture_policy)
+        object.__setattr__(self, "decision", decision); object.__setattr__(self, "risk_score", risk_score); object.__setattr__(self, "confidence", confidence); object.__setattr__(self, "checkpoint", checkpoint); object.__setattr__(self, "reasons", tuple(reasons)); object.__setattr__(self, "evidence", tuple(evidence)); object.__setattr__(self, "threshold_version", threshold_version); object.__setattr__(self, "gate_id", gate_id); object.__setattr__(self, "decided_at", decided_at); object.__setattr__(self, "decision_authority", decision_authority); object.__setattr__(self, "policy_version", policy_version); object.__setattr__(self, "capture_policy", capture_policy); object.__setattr__(self, "extensions", dict(extensions or {})); object.__setattr__(self, "_legacy", legacy)
     @classmethod
     def passed(cls) -> "GateDecision": return cls(outcome="pass")
     @classmethod
@@ -94,17 +164,22 @@ class GateDecision:
     def exit_code(self) -> int: return 0 if self.decision == "approve" else 1
     def to_dict(self) -> dict[str, Any]:
         if self._legacy: return {"outcome": self.outcome, "reasons": [r.to_dict() for r in self.reasons]}
-        return {"decision": self.decision, "risk_score": self.risk_score, "confidence": self.confidence, "checkpoint": self.checkpoint, "reasons": [r.to_dict() for r in self.reasons], "evidence": [e.to_dict() for e in self.evidence], "threshold_version": self.threshold_version}
+        payload = {"decision": self.decision, "risk_score": self.risk_score, "confidence": self.confidence, "checkpoint": self.checkpoint, "reasons": [r.to_dict() for r in self.reasons], "evidence": [e.to_dict() for e in self.evidence], "threshold_version": self.threshold_version}
+        for name in ("gate_id", "decided_at", "decision_authority", "policy_version", "capture_policy"):
+            value = getattr(self, name)
+            if value is not None: payload[name] = CapturePolicy(value).value if name == "capture_policy" else value
+        if self.extensions: payload["extensions"] = dict(self.extensions)
+        return payload
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "GateDecision":
         reasons = tuple(DecisionReason(str(r["code"]), str(r["message"]), tuple(EvidenceReference.from_dict(x) if "evidence_id" in x else Evidence(**x) for x in r.get("evidence", ()))) for r in value.get("reasons", ()))
         if "outcome" in value: return cls(outcome=str(value["outcome"]), reasons=reasons)
-        return cls(decision=str(value["decision"]), risk_score=value.get("risk_score"), confidence=value.get("confidence"), checkpoint=str(value["checkpoint"]), reasons=reasons, evidence=tuple(EvidenceReference.from_dict(x) for x in value.get("evidence", ())), threshold_version=str(value["threshold_version"]))
+        return cls(decision=str(value["decision"]), risk_score=value.get("risk_score"), confidence=value.get("confidence"), checkpoint=str(value["checkpoint"]), reasons=reasons, evidence=tuple(EvidenceReference.from_dict(x) for x in value.get("evidence", ())), threshold_version=str(value["threshold_version"]), gate_id=value.get("gate_id"), decided_at=value.get("decided_at"), decision_authority=value.get("decision_authority"), policy_version=value.get("policy_version"), capture_policy=value.get("capture_policy"), extensions=value.get("extensions"))
 
 
 @dataclass(frozen=True, init=False)
 class RunManifest:
-    schema_version: str; experiment_id: str; run_id: str; created_at: str; git_sha: str; harness_name: str; harness_version: str; dataset_id: str; dataset_hash: str; configuration_hash: str; model_provider: str; model_name: str; model_version: str; random_seed: int; replication_count: int; environment: Mapping[str, Any]; _legacy: bool = field(compare=False, repr=False); completed_at: str | None = None; artifacts: Mapping[str, str] = field(default_factory=dict); metadata: Mapping[str, Any] = field(default_factory=dict); configuration: Mapping[str, Any] = field(default_factory=dict); labels: Mapping[str, str] = field(default_factory=dict); decision: GateDecision | None = None; identifiers: Mapping[str, str] = field(default_factory=dict); hashes: Mapping[str, str] = field(default_factory=dict)
+    schema_version: str; experiment_id: str; run_id: str; created_at: str; git_sha: str; harness_name: str; harness_version: str; dataset_id: str; dataset_hash: str; configuration_hash: str; model_provider: str; model_name: str; model_version: str; random_seed: int; replication_count: int; environment: Mapping[str, Any]; _legacy: bool = field(compare=False, repr=False); completed_at: str | None = None; artifacts: Mapping[str, str] = field(default_factory=dict); metadata: Mapping[str, Any] = field(default_factory=dict); configuration: Mapping[str, Any] = field(default_factory=dict); labels: Mapping[str, str] = field(default_factory=dict); decision: GateDecision | None = None; identifiers: Mapping[str, str] = field(default_factory=dict); hashes: Mapping[str, str] = field(default_factory=dict); profile: str | None = None; capture_policy: CapturePolicy | str | None = None; extensions: Mapping[str, Any] = field(default_factory=dict)
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         v2_names = ("schema_version", "experiment_id", "run_id", "created_at", "git_sha", "harness_name", "harness_version", "dataset_id", "dataset_hash", "configuration_hash", "model_provider", "model_name", "model_version", "random_seed", "replication_count", "environment")
         legacy = "started_at" in kwargs or (args and not (isinstance(args[0], str) and args[0].count(".") == 2))
@@ -114,9 +189,9 @@ class RunManifest:
             identifiers, hashes = dict(data.get("identifiers") or {}), dict(data.get("hashes") or {})
             raw_artifacts = data.get("artifacts") or {}
             artifacts = {} if isinstance(raw_artifacts, str) else dict(raw_artifacts)
-            values = {"schema_version": str(data.get("schema_version", "arp/v1")), "experiment_id": identifiers.get("experiment_id", "legacy"), "run_id": data["run_id"], "created_at": data["started_at"], "git_sha": hashes.get("git_sha", "unknown"), "harness_name": identifiers.get("harness_name", "legacy"), "harness_version": identifiers.get("harness_version", "unknown"), "dataset_id": identifiers.get("dataset_id", "unknown"), "dataset_hash": hashes.get("dataset", next(iter(hashes.values()), "unknown")), "configuration_hash": hashes.get("configuration", "unknown"), "model_provider": "unknown", "model_name": "unknown", "model_version": "unknown", "random_seed": 0, "replication_count": 1, "environment": {}, "decision": data["decision"], "identifiers": identifiers, "hashes": hashes, "completed_at": data.get("completed_at"), "artifacts": artifacts, "metadata": dict(data.get("metadata") or {}), "configuration": dict(data.get("configuration") or {}), "labels": dict(data.get("labels") or {})}
+            values = {"schema_version": str(data.get("schema_version", "arp/v1")), "experiment_id": identifiers.get("experiment_id", "legacy"), "run_id": data["run_id"], "created_at": data["started_at"], "git_sha": hashes.get("git_sha", "unknown"), "harness_name": identifiers.get("harness_name", "legacy"), "harness_version": identifiers.get("harness_version", "unknown"), "dataset_id": identifiers.get("dataset_id", "unknown"), "dataset_hash": hashes.get("dataset", next(iter(hashes.values()), "unknown")), "configuration_hash": hashes.get("configuration", "unknown"), "model_provider": "unknown", "model_name": "unknown", "model_version": "unknown", "random_seed": 0, "replication_count": 1, "environment": {}, "decision": data["decision"], "identifiers": identifiers, "hashes": hashes, "completed_at": data.get("completed_at"), "artifacts": artifacts, "metadata": dict(data.get("metadata") or {}), "configuration": dict(data.get("configuration") or {}), "labels": dict(data.get("labels") or {}), "profile": data.get("profile"), "capture_policy": data.get("capture_policy"), "extensions": dict(data.get("extensions") or {})}
         else:
-            values = dict(zip(v2_names, args)); values.update(kwargs); values.setdefault("completed_at", None); values.setdefault("artifacts", {}); values.setdefault("metadata", {}); values.setdefault("configuration", {}); values.setdefault("labels", {}); values.setdefault("decision", None); values.setdefault("identifiers", {}); values.setdefault("hashes", {})
+            values = dict(zip(v2_names, args)); values.update(kwargs); values.setdefault("completed_at", None); values.setdefault("artifacts", {}); values.setdefault("metadata", {}); values.setdefault("configuration", {}); values.setdefault("labels", {}); values.setdefault("decision", None); values.setdefault("identifiers", {}); values.setdefault("hashes", {}); values.setdefault("profile", None); values.setdefault("capture_policy", None); values.setdefault("extensions", {})
         _nonempty("run_id", str(values["run_id"]))
         if legacy and not values["identifiers"]:
             raise ValueError("identifiers are required for legacy manifests")
@@ -125,6 +200,8 @@ class RunManifest:
         for name in v2_names[:13]:
             if name != "run_id": _nonempty(name, str(values[name]))
         _schema_version(values["schema_version"])
+        _policy(values.get("capture_policy"))
+        if not isinstance(values.get("extensions"), Mapping): raise ValueError("extensions must be an object")
         if not isinstance(values["random_seed"], int): raise ValueError("random_seed must be an integer")
         if not isinstance(values["replication_count"], int) or values["replication_count"] < 1: raise ValueError("replication_count must be positive")
         for name, value in values.items(): object.__setattr__(self, name, value)
@@ -135,7 +212,7 @@ class RunManifest:
             if self.completed_at: value["completed_at"] = self.completed_at
             if self.labels: value["labels"] = dict(self.labels)
             return value
-        payload = {k: (dict(v) if isinstance(v, Mapping) else v) for k, v in self.__dict__.items() if k != "_legacy" and v is not None}
+        payload = {k: (dict(v) if isinstance(v, Mapping) else (CapturePolicy(v).value if k == "capture_policy" else v)) for k, v in self.__dict__.items() if k != "_legacy" and v is not None}
         if isinstance(self.decision, GateDecision):
             payload["decision"] = self.decision.to_dict()
         return payload

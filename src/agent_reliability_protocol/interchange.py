@@ -2,14 +2,13 @@
 from __future__ import annotations
 import json
 from collections.abc import Mapping
-from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal
-from agent_reliability_protocol.contracts import GateDecision, RunManifest
+from agent_reliability_protocol.contracts import CapturePolicy, EvidenceReference, GateDecision, GateRequest, RunManifest
 from agent_reliability_protocol.events import LifecycleEvent, LIFECYCLE_CHECKPOINTS, validate_lifecycle_sequence
 
-ContractKind = Literal["decision", "event", "manifest", "sequence", "envelope"]
-class CaptureContent(str, Enum): NONE = "none"; METADATA = "metadata"; REDACTED = "redacted"; FULL = "full"
+ContractKind = Literal["decision", "event", "manifest", "sequence", "envelope", "evidence", "gate-request"]
+CaptureContent = CapturePolicy
 _SECRET_MARKERS = ("secret", "token", "password", "authorization", "cookie", "api_key", "prompt", "artifact", "tool_arguments", "retrieved_content", "pii")
 
 def redact_contract(value: Any, capture_content: CaptureContent | str = CaptureContent.REDACTED) -> Any:
@@ -33,6 +32,8 @@ def check_contract(kind: ContractKind, payload: Mapping[str, Any]) -> list[str]:
         if kind == "decision": GateDecision.from_dict(payload)
         elif kind == "event": LifecycleEvent.from_dict(payload)
         elif kind == "manifest": RunManifest.from_dict(payload)
+        elif kind == "evidence": EvidenceReference.from_dict(payload)
+        elif kind == "gate-request": GateRequest.from_dict(payload)
         elif kind == "sequence": validate_lifecycle_sequence(payload.get("events", ()))
         elif kind == "envelope": validate_thesis_envelope(payload["manifest"], payload["events"])
         else: return [f"unknown contract kind: {kind}"]
