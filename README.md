@@ -61,5 +61,7 @@ The ARP 3.0 design is documented in
 [docs/superpowers/specs/2026-08-14-arp-3-0-design.md](docs/superpowers/specs/2026-08-14-arp-3-0-design.md).
 The merge-gated delivery profile is documented in
 [docs/profiles/software-delivery-v1.md](docs/profiles/software-delivery-v1.md).
+The confirmatory requirement-degradation profile is documented in
+[docs/profiles/agent-smell-degradation-v1.md](docs/profiles/agent-smell-degradation-v1.md).
 The final control-plane specification is documented in
 [docs/merge-gated-delivery-control-plane-spec.md](docs/merge-gated-delivery-control-plane-spec.md).
