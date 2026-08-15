@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install contract and test dependencies
+        run: python -m pip install --constraint constraints.txt --editable . pytest
+      - name: Run tests
+        run: PYTHONWARNINGS=error python -m pytest -q
+      - name: Validate packaged ARP 3 fixtures through the CLI
+        run: |
+          arp-contract-test check --kind manifest --input src/agent_reliability_protocol/fixtures/v3/run-manifest.valid.json
+          arp-contract-test check --kind event --input src/agent_reliability_protocol/fixtures/v3/lifecycle-event.valid.json
+          arp-contract-test check --kind evidence --input src/agent_reliability_protocol/fixtures/v3/evidence-record.valid.json
+          arp-contract-test check --kind gate-request --input src/agent_reliability_protocol/fixtures/v3/gate-request.valid.json
+          arp-contract-test check --kind decision --input src/agent_reliability_protocol/fixtures/v3/gate-decision.valid.json
+      - name: Compile sources
+        run: python -m compileall -q src tests
