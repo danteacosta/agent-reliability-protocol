@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from agent_reliability_protocol.v3 import LifecycleEvent, validate_lifecycle_sequence
+
 
 AGENT_SMELL_PROFILE = "agent-smell-degradation/v1"
 _PRE_FINAL_CHECKPOINTS = frozenset(
@@ -47,6 +49,11 @@ def validate_agent_smell_run(
         missing = sorted(required - set(extension))
         if missing:
             errors.append("profile manifest extension missing: " + ", ".join(missing))
+        for field in required - {"confirmatory"}:
+            if field in extension and (not isinstance(extension[field], str) or not str(extension[field]).strip()):
+                errors.append(f"profile manifest extension {field} must be non-empty text")
+        if "confirmatory" in extension and not isinstance(extension["confirmatory"], bool):
+            errors.append("profile manifest extension confirmatory must be boolean")
         split = extension.get("split")
         if split not in {"train", "calibration", "test", "pilot"}:
             errors.append("profile split must be train, calibration, test, or pilot")
@@ -57,6 +64,17 @@ def validate_agent_smell_run(
             errors.append("confirmatory runs require runtime_native checkpoint provenance")
 
     ordered = sorted(events, key=lambda event: int(event.get("sequence_number", -1)))
+    try:
+        typed_events = [LifecycleEvent.from_dict(event) for event in events]
+        validate_lifecycle_sequence(typed_events)
+    except (KeyError, TypeError, ValueError) as error:
+        errors.append(f"invalid ARP lifecycle sequence: {error}")
+    manifest_run_id = manifest.get("run_id")
+    if any(event.get("run_id") != manifest_run_id for event in events):
+        errors.append("every event run_id must match the manifest run_id")
+    episode_ids = {event.get("episode_id") for event in events}
+    if len(episode_ids) != 1 or None in episode_ids:
+        errors.append("all events must share one non-empty episode_id")
     artifact_sequences = [
         int(event.get("sequence_number", -1))
         for event in ordered

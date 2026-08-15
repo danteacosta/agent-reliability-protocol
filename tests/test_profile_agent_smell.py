@@ -6,6 +6,7 @@ from arp_profiles import AGENT_SMELL_PROFILE, validate_agent_smell_run
 def manifest(*, confirmatory: bool = True, provenance: str = "runtime_native") -> dict[str, object]:
     return {
         "schema_version": "3.0.0",
+        "run_id": "run-1",
         "profile": AGENT_SMELL_PROFILE,
         "extensions": {
             AGENT_SMELL_PROFILE: {
@@ -24,9 +25,17 @@ def manifest(*, confirmatory: bool = True, provenance: str = "runtime_native") -
 def event(sequence: int, checkpoint: str, **profile: object) -> dict[str, object]:
     return {
         "event_id": f"event-{sequence}",
+        "schema_version": "3.0.0",
+        "run_id": "run-1",
+        "episode_id": "episode-1",
         "sequence_number": sequence,
         "checkpoint": checkpoint,
+        "event_type": checkpoint,
+        "started_at": f"2026-08-15T00:00:{sequence:02d}+00:00",
+        "ended_at": f"2026-08-15T00:00:{sequence:02d}+00:00",
         "attributes": {},
+        "content_reference": None,
+        "parent_event_id": None if sequence == 0 else f"event-{sequence - 1}",
         "extensions": {AGENT_SMELL_PROFILE: profile},
     }
 
@@ -85,3 +94,26 @@ def test_artifact_and_evaluation_are_label_plane_only_and_ordered() -> None:
 
     assert "evaluation.completed must occur after artifact.completed" in errors
     assert any("artifact.completed must declare plane=label" in error for error in errors)
+
+
+def test_profile_requires_non_empty_grouping_identity_and_boolean_flag() -> None:
+    broken = manifest()
+    extension = broken["extensions"][AGENT_SMELL_PROFILE]
+    extension["project_id"] = ""
+    extension["confirmatory"] = "yes"
+
+    errors = validate_agent_smell_run(broken, valid_events())
+
+    assert "profile manifest extension project_id must be non-empty text" in errors
+    assert "profile manifest extension confirmatory must be boolean" in errors
+
+
+def test_profile_rejects_cross_run_and_non_contiguous_events() -> None:
+    events = valid_events()
+    events[1]["run_id"] = "other-run"
+    events[2]["sequence_number"] = 9
+
+    errors = validate_agent_smell_run(manifest(), events)
+
+    assert "every event run_id must match the manifest run_id" in errors
+    assert any(error.startswith("invalid ARP lifecycle sequence") for error in errors)
