@@ -34,6 +34,15 @@ namespaced extension:
 `synthetic`. A confirmatory run MUST use `runtime_native`; replay-derived and
 synthetic runs are development evidence only.
 
+In this profile, `runtime_native` means **externally materialized by an
+instrumented runtime while the episode is active**. It does not mean access to
+model chain-of-thought, hidden activations, or privileged internal reasoning.
+A separate provider call made after or independently of terminal generation is
+a retrospective/prompted snapshot and MUST NOT be labeled `runtime_native`.
+Bounded interpretation, plan, tool, and retrieval summaries are eligible when
+they are observable before T4 and belong to the same episode that produces the
+artifact.
+
 `variant_ref` MUST be opaque to the implementation agent. Clean/smelly
 condition, injected defect class, oracle information, and expected outcome
 MUST NOT be exposed in prompts or T0–T3 event attributes/extensions.
@@ -48,7 +57,9 @@ MUST NOT be exposed in prompts or T0–T3 event attributes/extensions.
 | T3 | `execution.started`, `tool.completed`, `retrieval.completed` | observable | runtime native |
 | T4 | `artifact.completed`, then `evaluation.completed` | label | external artifact/evaluator |
 
-All T0–T3 events MUST precede the single `artifact.completed` event.
+All T0–T3 events MUST be materialized and available to the feature plane before
+the single `artifact.completed` event. Merely assigning earlier timestamps to a
+retrospectively generated grouped JSON object is invalid.
 `evaluation.completed`, when present, MUST follow `artifact.completed`.
 Runtime checkpoints contain:
 
@@ -74,6 +85,10 @@ artifacts or external blinded-label records.
 - Feature extraction for a checkpoint cutoff may consume only records at or
   before that cutoff.
 - Preprocessing and calibration are fit on train/calibration only.
+- The primary H2 comparison may define nested models in the experiment
+  profile; for `confirmatory-thesis-v3` these are B0=static+operational and
+  B1/B2/B3=B0 plus cumulative T1/T2/T3 provenance. ARP carries the evidence
+  boundary and does not select models or feature families.
 - Confirmatory outputs retain immutable source revision, configuration hash,
   capture policy, event sequence, and artifact hashes.
 
