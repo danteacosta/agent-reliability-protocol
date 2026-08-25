@@ -19,6 +19,11 @@ namespaced extension:
     "agent-smell-degradation/v1": {
       "experiment_id": "exp-2026-01",
       "project_id": "project-01",
+      "project_domain": "ecommerce-order-management",
+      "lifecycle_role": "functional-requirement",
+      "lifecycle_phase": "specification",
+      "dataset_schema": "confirmatory-v2",
+      "conditional_semantics_schema": "conditional-semantics/v1",
       "source_intent_id": "intent-017",
       "variant_ref": "sha256:opaque-variant-identity",
       "split": "test",
@@ -46,6 +51,9 @@ artifact.
 `variant_ref` MUST be opaque to the implementation agent. Clean/smelly
 condition, injected defect class, oracle information, and expected outcome
 MUST NOT be exposed in prompts or T0–T3 event attributes/extensions.
+Project-domain and lifecycle fields are static source metadata for grouped
+heterogeneity and external-validity analyses. They are not deployable feature
+values and MUST NOT be copied into T0–T3 feature rows.
 
 ## Temporal boundary
 
@@ -73,6 +81,32 @@ Runtime checkpoints contain:
   }
 }
 ```
+
+The thesis-specific T1 interpretation extension may additionally contain the
+bounded `conditional_semantics/v1` list:
+
+```json
+{
+  "conditional_semantics": [
+    {
+      "antecedent": "the request exceeds five minutes",
+      "consequent": "the request is rejected",
+      "necessity_status": "sufficient_only",
+      "temporal_relation": "next_state",
+      "negative_case": {
+        "status": "specified",
+        "description": "the request is at or below five minutes"
+      }
+    }
+  ]
+}
+```
+
+An empty list means no conditional clause was identified. The annotation is
+pre-final interpretation evidence; it contains no smell label, defect family,
+oracle result, artifact, or severity. The allowed necessity statuses are
+`sufficient_only`, `also_necessary`, and `undetermined`; temporal relations
+are `during`, `next_state`, `eventually`, `irrelevant`, or `undetermined`.
 
 T4 events declare `{"plane": "label"}` in the profile extension. Final
 labels, defect classes, oracle outputs, and severity may appear only in T4
