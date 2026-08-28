@@ -128,3 +128,10 @@ artifacts or external blinded-label records.
 
 Use `validate_agent_smell_run(manifest, events)` in the producer gate. A
 non-empty error list makes the run ineligible for confirmatory analysis.
+
+
+# Constraint-lineage boundary
+
+For the requirement-degradation profile, a pre-final extension may expose a bounded lineage record: `constraint_id`, a content hash, planned-check IDs, an execution-observation ID, status (`covered`/`uncovered`), and the cutoff at which it became available. This is provenance, not model chain-of-thought.
+
+The final artifact, independent reference constraint, oracle verdict, human label, and any T4 join must remain in the label-plane extension. A consumer may join them after collection for outcome analysis, but must never return that join to the T1--T3 feature plane.
