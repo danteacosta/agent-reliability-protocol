@@ -31,6 +31,8 @@ def validate_agent_smell_run(
 ) -> list[str]:
     """Validate provenance, temporal separation, and label isolation for one run."""
     errors: list[str] = []
+    if not isinstance(manifest, Mapping):
+        return ["manifest must be a JSON object"]
     if manifest.get("schema_version") != "3.0.0":
         errors.append("manifest must use ARP 3.0.0")
     if manifest.get("profile") != AGENT_SMELL_PROFILE:
@@ -55,10 +57,10 @@ def validate_agent_smell_run(
         if "confirmatory" in extension and not isinstance(extension["confirmatory"], bool):
             errors.append("profile manifest extension confirmatory must be boolean")
         split = extension.get("split")
-        if split not in {"train", "calibration", "test", "pilot"}:
+        if not isinstance(split, str) or split not in {"train", "calibration", "test", "pilot"}:
             errors.append("profile split must be train, calibration, test, or pilot")
         provenance = extension.get("checkpoint_provenance")
-        if provenance not in {"runtime_native", "replay_derived", "synthetic"}:
+        if not isinstance(provenance, str) or provenance not in {"runtime_native", "replay_derived", "synthetic"}:
             errors.append("checkpoint_provenance must be runtime_native, replay_derived, or synthetic")
         if extension.get("confirmatory") is True and provenance != "runtime_native":
             errors.append("confirmatory runs require runtime_native checkpoint provenance")

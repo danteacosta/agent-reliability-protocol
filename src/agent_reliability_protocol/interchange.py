@@ -51,11 +51,15 @@ def check_contract(kind: ContractKind, payload: Any) -> list[str]:
         elif kind == "gate-request": (GateRequestV3 if is_v3 else GateRequest).from_dict(payload)
         elif kind == "sequence":
             events = payload.get("events", ())
+            _require_event_objects(events)
             if events and str(events[0].get("schema_version", "")).startswith("3."):
                 validate_lifecycle_sequence_v3([LifecycleEventV3.from_dict(event) for event in events])
             else:
                 validate_lifecycle_sequence(events)
-        elif kind == "envelope": validate_thesis_envelope(payload["manifest"], payload["events"])
+        elif kind == "envelope":
+            _require_object(payload["manifest"])
+            _require_event_objects(payload["events"])
+            validate_thesis_envelope(payload["manifest"], payload["events"])
         else: return [f"unknown contract kind: {kind}"]
     except (KeyError, TypeError, ValueError) as exc: return [str(exc)]
     return []
@@ -204,3 +208,11 @@ def _read_text(path: Path) -> str:
         raise ValueError(f"{path.name}: input must be UTF-8") from exc
     except OSError as exc:
         raise ValueError(f"{path.name}: cannot read input ({exc.strerror})") from exc
+
+
+def _require_event_objects(events: Any) -> None:
+    if not isinstance(events, (list, tuple)):
+        raise ValueError("events must be an array")
+    for index, event in enumerate(events):
+        if not isinstance(event, Mapping):
+            raise ValueError(f"events[{index}] must be a JSON object")

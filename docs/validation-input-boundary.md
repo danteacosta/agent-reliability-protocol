@@ -12,6 +12,11 @@ an experimental result, and these checks do not establish semantic validity.
   JSON failure and exits with code 1 without reproducing the file contents.
 - Given a non-object manifest or event row, directory validation reports an
   error with file context and event line number when available.
+- Given a sequence or envelope contract, its event collection must be an array
+  of objects; envelopes also require an object manifest before parsing. These
+  compound kinds are available through `check_contract`, not the CLI kinds.
+- Given malformed profile manifest roots or non-text split/provenance fields,
+  return validation errors without dictionary/hash operations on those values.
 - Given malformed profile event sequence numbers, the profile returns an error
   before temporal ordering. Strings, booleans, fractions, negatives and missing
   values are not coerced into valid sequence numbers. Event indices are zero-based.

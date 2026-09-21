@@ -142,3 +142,16 @@ def test_profile_requires_sequence_number_before_temporal_checks() -> None:
     events = valid_events()
     del events[2]["sequence_number"]
     assert "event 2: sequence_number must be a non-negative integer" in validate_agent_smell_run(manifest(), events)
+
+
+@pytest.mark.parametrize("payload", [None, [], "text", 3])
+def test_profile_rejects_non_object_manifest(payload) -> None:
+    assert validate_agent_smell_run(payload, valid_events()) == ["manifest must be a JSON object"]
+
+
+@pytest.mark.parametrize("field", ["split", "checkpoint_provenance"])
+@pytest.mark.parametrize("value", [[], {}])
+def test_profile_reports_non_text_enumerations(field, value) -> None:
+    payload = manifest()
+    payload["extensions"][AGENT_SMELL_PROFILE][field] = value
+    assert f"profile manifest extension {field} must be non-empty text" in validate_agent_smell_run(payload, valid_events())

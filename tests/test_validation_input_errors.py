@@ -56,3 +56,17 @@ def test_directory_reports_non_utf8_input(tmp_path, file_name):
     (tmp_path / file_name).write_bytes(b"\xff")
     errors = validate_run_directory(tmp_path)
     assert errors and file_name in errors[0]
+
+
+@pytest.mark.parametrize("events", [[None], [3], ["text"], [[]], {}, "text", None])
+@pytest.mark.parametrize("kind", ["sequence", "envelope"])
+def test_compound_contracts_reject_non_object_events(kind, events):
+    root = Path(__file__).resolve().parents[1] / "src/agent_reliability_protocol/fixtures/v2"
+    manifest = json.loads((root / "run-manifest.valid.json").read_text())
+    errors = check_contract(kind, {"manifest": manifest, "events": events})
+    assert errors and ("events must be an array" in errors[0] or "events[0] must be a JSON object" in errors[0])
+
+
+@pytest.mark.parametrize("manifest", [None, [], "text", 3])
+def test_envelope_rejects_non_object_manifest(manifest):
+    assert check_contract("envelope", {"manifest": manifest, "events": []}) == ["contract must be a JSON object"]
