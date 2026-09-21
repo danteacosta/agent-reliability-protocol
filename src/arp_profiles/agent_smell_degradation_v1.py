@@ -31,6 +31,8 @@ def validate_agent_smell_run(
 ) -> list[str]:
     """Validate provenance, temporal separation, and label isolation for one run."""
     errors: list[str] = []
+    if not isinstance(manifest, Mapping):
+        return ["manifest must be a JSON object"]
     if manifest.get("schema_version") != "3.0.0":
         errors.append("manifest must use ARP 3.0.0")
     if manifest.get("profile") != AGENT_SMELL_PROFILE:
@@ -55,15 +57,26 @@ def validate_agent_smell_run(
         if "confirmatory" in extension and not isinstance(extension["confirmatory"], bool):
             errors.append("profile manifest extension confirmatory must be boolean")
         split = extension.get("split")
-        if split not in {"train", "calibration", "test", "pilot"}:
+        if not isinstance(split, str) or split not in {"train", "calibration", "test", "pilot"}:
             errors.append("profile split must be train, calibration, test, or pilot")
         provenance = extension.get("checkpoint_provenance")
-        if provenance not in {"runtime_native", "replay_derived", "synthetic"}:
+        if not isinstance(provenance, str) or provenance not in {"runtime_native", "replay_derived", "synthetic"}:
             errors.append("checkpoint_provenance must be runtime_native, replay_derived, or synthetic")
         if extension.get("confirmatory") is True and provenance != "runtime_native":
             errors.append("confirmatory runs require runtime_native checkpoint provenance")
 
-    ordered = sorted(events, key=lambda event: int(event.get("sequence_number", -1)))
+    event_errors: list[str] = []
+    for index, event in enumerate(events):
+        if not isinstance(event, Mapping):
+            event_errors.append(f"event {index}: contract must be a JSON object")
+            continue
+        sequence = event.get("sequence_number")
+        if type(sequence) is not int or sequence < 0:
+            event_errors.append(f"event {index}: sequence_number must be a non-negative integer")
+    if event_errors:
+        return errors + event_errors
+
+    ordered = sorted(events, key=lambda event: event["sequence_number"])
     try:
         typed_events = [LifecycleEvent.from_dict(event) for event in events]
         validate_lifecycle_sequence(typed_events)
@@ -76,12 +89,12 @@ def validate_agent_smell_run(
     if len(episode_ids) != 1 or None in episode_ids:
         errors.append("all events must share one non-empty episode_id")
     artifact_sequences = [
-        int(event.get("sequence_number", -1))
+        event["sequence_number"]
         for event in ordered
         if event.get("checkpoint") == "artifact.completed"
     ]
     evaluation_sequences = [
-        int(event.get("sequence_number", -1))
+        event["sequence_number"]
         for event in ordered
         if event.get("checkpoint") == "evaluation.completed"
     ]
@@ -94,7 +107,7 @@ def validate_agent_smell_run(
 
     for event in ordered:
         checkpoint = event.get("checkpoint")
-        sequence = int(event.get("sequence_number", -1))
+        sequence = event["sequence_number"]
         if checkpoint in _PRE_FINAL_CHECKPOINTS:
             if artifact_sequences and sequence >= artifact_sequences[0]:
                 errors.append(f"pre-final checkpoint {checkpoint} must precede artifact.completed")
