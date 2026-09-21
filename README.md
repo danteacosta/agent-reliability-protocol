@@ -41,6 +41,12 @@ arp-contract-test check --kind manifest --input manifest.json
 arp-contract-test check --run-directory ./runs/example
 ```
 
+Validation writes one JSON result with `valid` and `errors` to stdout. The CLI
+exits with code `0` for valid input and `1` for invalid contracts, malformed JSON,
+non-UTF-8 input, or input files that cannot be read. JSON contract roots and event
+rows must be objects; run-directory errors identify the file and, for parsed
+JSONL rows, its line number. Invalid command-line usage exits with code `2`.
+
 The test environment is pinned in [constraints.txt](constraints.txt). The
 published v2.0.6 package remains MIT-licensed and is not retagged.
 

@@ -36,8 +36,9 @@ def export_contract(value: Any, path: Path | str, *, redact: bool = True, captur
     output = Path(path); output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(redact_contract(payload, mode), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
-def check_contract(kind: ContractKind, payload: Mapping[str, Any]) -> list[str]:
+def check_contract(kind: ContractKind, payload: Any) -> list[str]:
     try:
+        _require_object(payload)
         json.dumps(payload, ensure_ascii=True)
         is_v3 = str(payload.get("schema_version", "")).startswith("3.")
         if is_v3:
@@ -104,8 +105,13 @@ def adapt_manifest_v2(value: Mapping[str, Any]) -> dict[str, Any]:
 def validate_run_directory(path: Path | str) -> list[str]:
     directory = Path(path); errors: list[str] = []; manifest_path = directory / "manifest.json"; events_path = directory / "events.jsonl"
     if not manifest_path.is_file(): return ["missing manifest.json"]
-    try: manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc: return [f"invalid manifest.json: {exc.msg}"]
+    try:
+        manifest = json.loads(_read_text(manifest_path))
+        _require_object(manifest)
+    except json.JSONDecodeError as exc:
+        return [f"invalid manifest.json: {exc.msg}"]
+    except ValueError as exc:
+        return [f"manifest: {exc}"]
     if str(manifest.get("schema_version", "")).startswith("3."):
         return validate_run_directory_v3(directory, manifest, events_path)
     errors.extend(f"manifest: {e}" for e in check_contract("manifest", manifest))
@@ -113,8 +119,15 @@ def validate_run_directory(path: Path | str) -> list[str]:
         if isinstance(reference, str) and "://" not in reference and not (directory / reference).exists(): errors.append(f"manifest artifact {name!r} does not exist: {reference}")
     if not events_path.is_file(): return errors + ["missing events.jsonl"]
     seen: set[str] = set(); sequence_by_episode: dict[tuple[str, int], int] = {}; parsed_events: list[LifecycleEvent] = []
-    for line_number, line in enumerate(events_path.read_text(encoding="utf-8").splitlines(), 1):
-        try: event = json.loads(line); parsed = LifecycleEvent.from_dict(event)
+    try:
+        lines = _read_text(events_path).splitlines()
+    except ValueError as exc:
+        return errors + [str(exc)]
+    for line_number, line in enumerate(lines, 1):
+        try:
+            event = json.loads(line)
+            _require_object(event)
+            parsed = LifecycleEvent.from_dict(event)
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc: errors.append(f"events.jsonl:{line_number}: {exc}"); continue
         parsed_events.append(parsed)
         if parsed.run_id != manifest.get("run_id"): errors.append(f"events.jsonl:{line_number}: run_id does not match manifest")
@@ -138,9 +151,11 @@ def validate_run_directory(path: Path | str) -> list[str]:
 def validate_run_directory_v3(directory: Path, manifest: Mapping[str, Any] | None = None, events_path: Path | None = None) -> list[str]:
     """Validate a v3 manifest and its JSONL lifecycle envelope."""
     errors: list[str] = []
-    manifest = manifest or json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     events_path = events_path or directory / "events.jsonl"
     try:
+        if manifest is None:
+            manifest = json.loads(_read_text(directory / "manifest.json"))
+        _require_object(manifest)
         assert_neutral_contract(manifest)
         parsed_manifest = RunManifestV3.from_dict(manifest)
     except (KeyError, TypeError, ValueError) as exc:
@@ -149,9 +164,14 @@ def validate_run_directory_v3(directory: Path, manifest: Mapping[str, Any] | Non
         return ["missing events.jsonl"]
     parsed_events: list[LifecycleEventV3] = []
     seen: set[str] = set()
-    for line_number, line in enumerate(events_path.read_text(encoding="utf-8").splitlines(), 1):
+    try:
+        lines = _read_text(events_path).splitlines()
+    except ValueError as exc:
+        return errors + [str(exc)]
+    for line_number, line in enumerate(lines, 1):
         try:
             event_payload = json.loads(line)
+            _require_object(event_payload)
             assert_neutral_contract(event_payload)
             parsed = LifecycleEventV3.from_dict(event_payload)
             if parsed.run_id != parsed_manifest.run_id:
@@ -170,3 +190,17 @@ def validate_run_directory_v3(directory: Path, manifest: Mapping[str, Any] | Non
     return errors
 
 def _sensitive(key: str) -> bool: return any(marker in key.lower().replace("-", "_") for marker in _SECRET_MARKERS)
+
+
+def _require_object(payload: Any) -> None:
+    if not isinstance(payload, Mapping):
+        raise ValueError("contract must be a JSON object")
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise ValueError(f"{path.name}: input must be UTF-8") from exc
+    except OSError as exc:
+        raise ValueError(f"{path.name}: cannot read input ({exc.strerror})") from exc

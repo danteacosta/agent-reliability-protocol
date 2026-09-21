@@ -63,7 +63,18 @@ def validate_agent_smell_run(
         if extension.get("confirmatory") is True and provenance != "runtime_native":
             errors.append("confirmatory runs require runtime_native checkpoint provenance")
 
-    ordered = sorted(events, key=lambda event: int(event.get("sequence_number", -1)))
+    event_errors: list[str] = []
+    for index, event in enumerate(events):
+        if not isinstance(event, Mapping):
+            event_errors.append(f"event {index}: contract must be a JSON object")
+            continue
+        sequence = event.get("sequence_number")
+        if type(sequence) is not int or sequence < 0:
+            event_errors.append(f"event {index}: sequence_number must be a non-negative integer")
+    if event_errors:
+        return errors + event_errors
+
+    ordered = sorted(events, key=lambda event: event["sequence_number"])
     try:
         typed_events = [LifecycleEvent.from_dict(event) for event in events]
         validate_lifecycle_sequence(typed_events)
@@ -76,12 +87,12 @@ def validate_agent_smell_run(
     if len(episode_ids) != 1 or None in episode_ids:
         errors.append("all events must share one non-empty episode_id")
     artifact_sequences = [
-        int(event.get("sequence_number", -1))
+        event["sequence_number"]
         for event in ordered
         if event.get("checkpoint") == "artifact.completed"
     ]
     evaluation_sequences = [
-        int(event.get("sequence_number", -1))
+        event["sequence_number"]
         for event in ordered
         if event.get("checkpoint") == "evaluation.completed"
     ]
@@ -94,7 +105,7 @@ def validate_agent_smell_run(
 
     for event in ordered:
         checkpoint = event.get("checkpoint")
-        sequence = int(event.get("sequence_number", -1))
+        sequence = event["sequence_number"]
         if checkpoint in _PRE_FINAL_CHECKPOINTS:
             if artifact_sequences and sequence >= artifact_sequences[0]:
                 errors.append(f"pre-final checkpoint {checkpoint} must precede artifact.completed")

@@ -19,7 +19,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.run_directory:
         errors = validate_run_directory(args.run_directory)
     elif args.kind and args.input:
-        errors = check_contract(args.kind, json.loads(args.input.read_text(encoding="utf-8")))
+        try:
+            payload = json.loads(args.input.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors = [f"invalid JSON: {exc.msg} (line {exc.lineno}, column {exc.colno})"]
+        except UnicodeError:
+            errors = ["input must be UTF-8"]
+        except OSError as exc:
+            errors = [f"cannot read input: {exc.strerror}"]
+        else:
+            errors = check_contract(args.kind, payload)
     else:
         parser.error("--run-directory or both --kind and --input are required")
     print(json.dumps({"valid": not errors, "errors": errors}))
