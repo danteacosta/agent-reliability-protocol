@@ -155,3 +155,20 @@ def test_profile_reports_non_text_enumerations(field, value) -> None:
     payload = manifest()
     payload["extensions"][AGENT_SMELL_PROFILE][field] = value
     assert f"profile manifest extension {field} must be non-empty text" in validate_agent_smell_run(payload, valid_events())
+
+
+@pytest.mark.parametrize("field", ["episode_id", "checkpoint"])
+@pytest.mark.parametrize("malformed", [[], {}, ["value"], {"value": "x"}])
+def test_malformed_event_identity_returns_errors_instead_of_crashing(field, malformed) -> None:
+    events = valid_events()
+    events[2][field] = malformed
+
+    errors = validate_agent_smell_run(manifest(), events)
+
+    assert errors
+    assert any(field in error for error in errors)
+
+
+@pytest.mark.parametrize("malformed", [None, 1, True, {}, "events"])
+def test_malformed_event_collection_returns_errors_instead_of_crashing(malformed) -> None:
+    assert validate_agent_smell_run(manifest(), malformed)
