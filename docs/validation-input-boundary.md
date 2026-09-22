@@ -34,3 +34,9 @@ Behavior tests call the public validators and CLI entry point with temporary
 files. They cover null, arrays, strings, numbers, booleans, malformed JSON,
 invalid UTF-8, and absent files. Run `python -m pytest -q` and the CLI fixture
 checks from CI. No browser test is needed for this offline interface.
+
+The requirement-degradation profile also validates the event collection and
+identity shapes before ordering or grouping events. A non-array collection,
+or an event with a non-text episode ID or checkpoint, returns profile errors
+instead of an uncaught Python exception. Shape failures stop dependent semantic
+checks; callers must treat any returned error as a rejected run.

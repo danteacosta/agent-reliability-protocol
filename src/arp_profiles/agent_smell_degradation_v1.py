@@ -65,11 +65,18 @@ def validate_agent_smell_run(
         if extension.get("confirmatory") is True and provenance != "runtime_native":
             errors.append("confirmatory runs require runtime_native checkpoint provenance")
 
+    if not isinstance(events, Sequence) or isinstance(events, (str, bytes, bytearray)):
+        return errors + ["events must be an array of event objects"]
+
     event_errors: list[str] = []
     for index, event in enumerate(events):
         if not isinstance(event, Mapping):
             event_errors.append(f"event {index}: contract must be a JSON object")
             continue
+        for field in ("episode_id", "checkpoint"):
+            value = event.get(field)
+            if not isinstance(value, str) or not value.strip():
+                event_errors.append(f"event {index}: {field} must be non-empty text")
         sequence = event.get("sequence_number")
         if type(sequence) is not int or sequence < 0:
             event_errors.append(f"event {index}: sequence_number must be a non-negative integer")
